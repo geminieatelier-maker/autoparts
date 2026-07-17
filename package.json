@@ -1,25 +1,100 @@
 {
   "name": "autoparts",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.1",
   "type": "module",
+  "main": "electron/main.cjs",
+  "author": "Datalio",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron": "electron .",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "web": "node electron/web-server.cjs",
+    "dist": "vite build && electron-builder --win"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.22.0",
+    "pg": "^8.13.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.0"
+    "react-router-dom": "^7.18.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.1.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "oxlint": "^1.69.0",
-    "vite": "^8.1.0"
+    "vite": "^8.1.0",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.absstore.erp",
+    "productName": "ABS Store",
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "geminieatelier-maker",
+        "repo": "autoparts"
+      }
+    ],
+    "files": [
+      "electron/**/*",
+      "schema.sql",
+      "dist/**/*",
+      "build/icon.png",
+      "build/icon.ico",
+      "!node_modules/**/{test,tests,__tests__,doc,docs,example,examples}/**",
+      "!node_modules/**/*.md"
+    ],
+    "extraResources": [
+      {
+        "from": "pg-portable/bin",
+        "to": "pg-portable/bin",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "pg-portable/lib",
+        "to": "pg-portable/lib",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "pg-portable/share",
+        "to": "pg-portable/share",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "artifactName": "ABS-Store-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "ABS Store",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    }
   }
 }

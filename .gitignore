@@ -11,6 +11,17 @@ node_modules
 dist
 dist-ssr
 *.local
+*.local.cjs
+
+# Secrets / build artifacts (jamais versionnés)
+electron/groq-key.local.cjs
+pg-portable/
+release/
+
+# Notes internes / contrat client (jamais versionnées — infos privées + repo public)
+CONTEXTE-AUTOPARTS.md
+err.txt
+out.txt
 
 # Editor directories and files
 .vscode/*

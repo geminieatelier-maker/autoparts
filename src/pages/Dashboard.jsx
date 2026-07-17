@@ -1,29 +1,52 @@
-import { ShoppingCart, AlertTriangle, Brain, Truck, Clock, ClipboardList, TrendingUp } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ShoppingCart, AlertTriangle, Brain, Truck, Package } from 'lucide-react'
+import { API, fmtAr, fmtDate } from '../lib/api'
+
+const statutBadge = s => s==='Livré'?'b-g':s==='Impayé'?'b-r':s==='Devis'?'b-b':'b-y'
 
 export default function Dashboard({ onNavigate }) {
+  const [s, setS] = useState(null)
+  const [cmds, setCmds] = useState([])
+
+  useEffect(() => {
+    if (!API) return
+    const load = () => { API.getStats().then(setS); API.getCommandes({}).then(cs=>setCmds(cs.slice(0,6))) }
+    load()
+    const t = setInterval(load, 8000)   // rafraîchissement live
+    return () => clearInterval(t)
+  }, [])
+
+  const v = (x) => s ? x : '—'
+
   return <>
     <div className="stats">
-      <div className="stat"><div className="label">Commandes clients</div><div className="value" style={{color:'#f0b429'}}>12</div><div className="sub" style={{color:'#22c55e'}}>+3 aujourd'hui</div></div>
-      <div className="stat"><div className="label">Cmd fournisseurs</div><div className="value" style={{color:'#8b5cf6'}}>3</div><div className="sub" style={{color:'#94a3b8'}}>2 en transit</div></div>
-      <div className="stat"><div className="label">Devis en attente</div><div className="value" style={{color:'#3b82f6'}}>5</div><div className="sub" style={{color:'#94a3b8'}}>2 expirent bientôt</div></div>
-      <div className="stat"><div className="label">Réceptions prévues</div><div className="value" style={{color:'#22c55e'}}>8</div><div className="sub" style={{color:'#94a3b8'}}>3 en transit</div></div>
-      <div className="stat"><div className="label">Créances clients</div><div className="value" style={{color:'#ef4444'}}>4.2M</div><div className="sub" style={{color:'#ef4444'}}>850k en retard</div></div>
-      <div className="stat"><div className="label">Dettes fournisseurs</div><div className="value" style={{color:'#a855f7'}}>6.8M</div><div className="sub" style={{color:'#94a3b8'}}>2.1M à 30j</div></div>
-      <div className="stat"><div className="label">CA ce mois</div><div className="value" style={{color:'#f8fafc'}}>12.5M</div><div className="sub" style={{color:'#22c55e'}}>Marge: 28%</div></div>
-      <div className="stat"><div className="label">Bénéfice net</div><div className="value" style={{color:'#22c55e'}}>3.5M</div><div className="sub" style={{color:'#22c55e'}}>+12% vs mois dernier</div></div>
+      <div className="stat"><div className="label">Commandes en cours</div><div className="value" style={{color:'#f5c518'}}>{v(s?.cmd_encours)}</div></div>
+      <div className="stat"><div className="label">Devis en attente</div><div className="value" style={{color:'#3b82f6'}}>{v(s?.devis)}</div></div>
+      <div className="stat"><div className="label">Cmd fournisseurs actives</div><div className="value" style={{color:'#8b5cf6'}}>{v(s?.cf_actives)}</div></div>
+      <div className="stat"><div className="label">À réceptionner</div><div className="value" style={{color:'#22c55e'}}>{v(s?.cf_a_recevoir)}</div></div>
+      <div className="stat"><div className="label">Clients</div><div className="value" style={{color:'#f8fafc'}}>{v(s?.nb_clients)}</div></div>
+      <div className="stat"><div className="label">Fournisseurs</div><div className="value" style={{color:'#f8fafc'}}>{v(s?.nb_fournisseurs)}</div></div>
+      <div className="stat"><div className="label">Commandes clients (mois)</div><div className="value" style={{color:'#22c55e'}}>{s?fmtAr(s.ca_mois):'—'}</div></div>
+      <div className="stat"><div className="label">Achats fournisseurs (mois)</div><div className="value" style={{color:'#a855f7'}}>{s?fmtAr(s.achats_mois):'—'}</div></div>
+      <div className="stat"><div className="label">Créances clients</div><div className="value" style={{color:'#ef4444'}}>{s?fmtAr(s.creances):'—'}</div></div>
+      <div className="stat"><div className="label">Dettes fournisseurs</div><div className="value" style={{color:'#f5c518'}}>{s?fmtAr(s.dettes):'—'}</div></div>
+      <div className="stat"><div className="label">Bénéfice (mois)</div><div className="value" style={{color:'#22c55e'}}>{s?fmtAr(s.benefice_mois):'—'}</div></div>
     </div>
 
     <div className="grid2">
       <div className="card">
-        <div className="card-title"><ShoppingCart size={18}/> Dernières commandes</div>
+        <div className="card-title"><ShoppingCart size={18}/> Dernières commandes clients</div>
         <div className="tbl-wrap">
         <table className="tbl">
           <thead><tr><th>N°</th><th>Client</th><th>Montant</th><th>Statut</th></tr></thead>
           <tbody>
-            <tr onClick={()=>onNavigate('/commandes')} style={{cursor:'pointer'}}><td style={{color:'#f0b429'}}>CMD-047</td><td>Garage Rova</td><td>1.2M Ar</td><td><span className="badge b-y">En cours</span></td></tr>
-            <tr onClick={()=>onNavigate('/commandes')} style={{cursor:'pointer'}}><td style={{color:'#f0b429'}}>CMD-046</td><td>Auto Mada</td><td>680k Ar</td><td><span className="badge b-b">Devis</span></td></tr>
-            <tr onClick={()=>onNavigate('/commandes')} style={{cursor:'pointer'}}><td style={{color:'#f0b429'}}>CMD-045</td><td>Pièces Express</td><td>3.4M Ar</td><td><span className="badge b-g">Livré</span></td></tr>
-            <tr onClick={()=>onNavigate('/commandes')} style={{cursor:'pointer'}}><td style={{color:'#f0b429'}}>CMD-044</td><td>Méca Service</td><td>2.1M Ar</td><td><span className="badge b-r">Impayé</span></td></tr>
+            {cmds.length===0 ? <tr><td colSpan={4} style={{color:'#64748b',textAlign:'center',padding:16}}>Aucune commande</td></tr> :
+            cmds.map(c=>(
+              <tr key={c.id} onClick={()=>onNavigate('/commandes')} style={{cursor:'pointer'}}>
+                <td style={{color:'#f5c518'}}>{c.numero}</td><td>{c.client_nom||'—'}</td><td>{fmtAr(c.total)}</td>
+                <td><span className={`badge ${statutBadge(c.statut)}`}>{c.statut}</span></td>
+              </tr>
+            ))}
           </tbody>
         </table>
         </div>
@@ -31,14 +54,15 @@ export default function Dashboard({ onNavigate }) {
 
       <div>
         <div className="card">
-          <div className="card-title"><AlertTriangle size={18}/> Alertes</div>
-          <div className="alert alert-r"><Clock size={14}/> Facture F-039 impayée depuis 45j — Méca Service</div>
-          <div className="alert alert-y"><Truck size={14}/> Réception Guangzhou prévue demain — 14 pièces</div>
-          <div className="alert alert-b"><ShoppingCart size={14}/> 3 devis fournisseurs en attente</div>
+          <div className="card-title"><AlertTriangle size={18}/> À suivre</div>
+          {s && s.cf_a_recevoir>0 && <div className="alert alert-y"><Truck size={14}/> {s.cf_a_recevoir} commande(s) fournisseur à réceptionner</div>}
+          {s && s.devis>0 && <div className="alert alert-b"><ShoppingCart size={14}/> {s.devis} devis en attente</div>}
+          {s && s.cmd_encours>0 && <div className="alert alert-y"><Package size={14}/> {s.cmd_encours} commande(s) client en cours</div>}
+          {s && s.cf_a_recevoir===0 && s.devis===0 && s.cmd_encours===0 && <div style={{color:'#64748b',fontSize:14}}>Rien à signaler.</div>}
         </div>
         <div className="card">
           <div className="card-title"><Brain size={18}/> Intelligence</div>
-          <div className="ai-box">Guangzhou Auto a augmenté ses prix de 12% ce mois. Envisagez Dubai Parts pour les filtres Toyota — marge supérieure de 8%.</div>
+          <div className="ai-box">Le module d'analyse (comparaison automatique des prix, conseils d'achat, rentabilité) sera activé prochainement.</div>
         </div>
       </div>
     </div>

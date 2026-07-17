@@ -1,7 +1,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;--fg:#f8fafc;--fg2:#94a3b8;--fg3:#64748b;
-  --accent:#f0b429;--accent2:#f59e0b;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
+  --accent:#f5c518;--accent2:#eab308;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#a855f7;
   --radius:10px;
   font-family:'Segoe UI',system-ui,sans-serif;
 }

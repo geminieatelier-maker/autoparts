@@ -1,7 +1,10 @@
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, ShoppingCart, Scale, Truck, Package, FileText, Banknote, Send, Brain, Settings, Menu, X, LogOut, Car, Bell, ClipboardList, ScrollText } from 'lucide-react'
+import { LayoutDashboard, ShoppingCart, Scale, Truck, Package, FileText, Banknote, Send, Brain, Settings, Menu, X, LogOut, Car, Bell, ClipboardList, ScrollText, Users } from 'lucide-react'
 import { useState } from 'react'
+import { hasBackend, setCurrentUser } from './lib/api'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Clients from './pages/Clients'
 import Commandes from './pages/Commandes'
 import Comparateur from './pages/Comparateur'
 import Fournisseurs from './pages/Fournisseurs'
@@ -15,10 +18,13 @@ import Journal from './pages/Journal'
 import Parametres from './pages/Parametres'
 import './App.css'
 
+const logoUrl = import.meta.env.BASE_URL + 'logo.png'
+
 const nav = [
   { section: 'Principal' },
   { path: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
   { path: '/commandes', icon: ShoppingCart, label: 'Commandes clients' },
+  { path: '/clients', icon: Users, label: 'Clients' },
   { path: '/comparateur', icon: Scale, label: 'Comparateur prix' },
   { path: '/fournisseurs', icon: Truck, label: 'Fournisseurs' },
   { path: '/cmd-fournisseurs', icon: ClipboardList, label: 'Cmd fournisseurs' },
@@ -43,9 +49,14 @@ const mobileNav = [
 
 export default function App() {
   const [open, setOpen] = useState(false)
+  // Login : si backend absent (maquette/navigateur), connexion auto en admin.
+  const [user, setUser] = useState(hasBackend ? null : { nom:'Admin', role:'admin' })
   const navigate = useNavigate()
   const location = useLocation()
   const current = nav.find(n => n.path === location.pathname)
+
+  if (!user) return <Login onLogin={u => { setCurrentUser(u); setUser(u) }} />
+  function logout() { setCurrentUser({ id:null, nom:'Admin', role:'admin' }); setUser(null); navigate('/') }
 
   function goTo(path) {
     navigate(path)
@@ -56,10 +67,10 @@ export default function App() {
     <div className="app-layout">
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sb-logo">
-          <div className="sb-icon"><Car size={20} /></div>
+          <div className="sb-icon" style={{background:'transparent',overflow:'hidden',padding:0}}><img src={logoUrl} alt="ABS Store" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>
           <div>
-            <h1>AutoParts</h1>
-            <small>ERP par Datalio</small>
+            <h1>ABS Store</h1>
+            <small>Pièces autos</small>
           </div>
           <button className="sb-close" onClick={() => setOpen(false)}><X size={20} /></button>
         </div>
@@ -74,12 +85,12 @@ export default function App() {
           )}
         </nav>
         <div className="sb-user">
-          <div className="sb-avatar">A</div>
+          <div className="sb-avatar">{(user.nom||'?').charAt(0).toUpperCase()}</div>
           <div className="sb-info">
-            <div className="sb-name">Admin</div>
-            <div className="sb-role">Administrateur</div>
+            <div className="sb-name">{user.nom||'—'}</div>
+            <div className="sb-role">{user.role==='admin'?'Administrateur':(user.role||'Opérateur')}</div>
           </div>
-          <LogOut size={16} className="sb-logout" />
+          <LogOut size={16} className="sb-logout" style={{cursor:'pointer'}} onClick={logout} title="Déconnexion" />
         </div>
       </aside>
       {open && <div className="overlay" onClick={() => setOpen(false)} />}
@@ -98,6 +109,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard onNavigate={goTo} />} />
             <Route path="/commandes" element={<Commandes onNavigate={goTo} />} />
+            <Route path="/clients" element={<Clients />} />
             <Route path="/comparateur" element={<Comparateur />} />
             <Route path="/fournisseurs" element={<Fournisseurs />} />
             <Route path="/cmd-fournisseurs" element={<CmdFournisseurs />} />
