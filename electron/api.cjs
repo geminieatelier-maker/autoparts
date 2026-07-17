@@ -640,6 +640,179 @@ const API = {
     return dir;
   },
 
+  // ---------- Données de démonstration / Réinitialisation ----------
+  // Jeu de données fictives réaliste (clients, fournisseurs, commandes, devis, factures,
+  // paiements, expéditions) pour permettre au client de tester tous les modules.
+  seedDemoData: async (user) => {
+    const uid = user ? user.id : null, unom = user ? user.nom : null;
+    const days = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0,10); };
+    const rnd = (arr) => arr[Math.floor(Math.random()*arr.length)];
+
+    const PIECES = [
+      { designation:'Filtre à huile', reference:'FH-2201', marque:'Toyota', prix:18000 },
+      { designation:'Plaquettes de frein avant', reference:'PF-4410', marque:'Nissan', prix:65000 },
+      { designation:'Amortisseur avant droit', reference:'AM-3301', marque:'Mitsubishi', prix:120000 },
+      { designation:'Courroie de distribution', reference:'CD-1102', marque:'Toyota', prix:85000 },
+      { designation:"Bougies d'allumage (jeu de 4)", reference:'BG-5501', marque:'Renault', prix:32000 },
+      { designation:'Disque de frein avant', reference:'DF-2209', marque:'Peugeot', prix:78000 },
+      { designation:'Rotule de direction', reference:'RD-6602', marque:'Toyota', prix:45000 },
+      { designation:'Radiateur moteur', reference:'RM-7701', marque:'Nissan', prix:210000 },
+      { designation:'Alternateur 12V', reference:'AL-8801', marque:'Mitsubishi', prix:280000 },
+      { designation:'Démarreur', reference:'DM-9901', marque:'Toyota', prix:195000 },
+      { designation:"Kit d'embrayage complet", reference:'KE-1203', marque:'Renault', prix:165000 },
+      { designation:'Pare-choc avant', reference:'PC-3405', marque:'Toyota', prix:250000 },
+      { designation:'Filtre à air', reference:'FA-2202', marque:'Nissan', prix:15000 },
+      { designation:'Filtre à carburant', reference:'FC-2203', marque:'Toyota', prix:22000 },
+      { designation:'Batterie 12V 60Ah', reference:'BAT-1001', marque:'Mitsubishi', prix:135000 },
+      { designation:'Durite de radiateur', reference:'DR-4501', marque:'Toyota', prix:19000 },
+    ];
+
+    // ---- Clients ----
+    const clientsData = [
+      { nom:'Garage Rakotoarivelo', contact:'Jean Rakotoarivelo', tel:'034 12 345 67', email:'rakoto.garage@gmail.com', adresse:'Ankorondrano, Antananarivo', remise:5 },
+      { nom:'Ets Randriamampionona', contact:'Herimanana Randriamampionona', tel:'033 45 678 90', email:'ets.randria@gmail.com', adresse:'Analakely, Antananarivo', remise:0 },
+      { nom:'Taxi-Be Andrianina', contact:'Solofo Andrianina', tel:'032 11 222 33', email:'', adresse:'Antsirabe', remise:10 },
+      { nom:'Garage Miora Auto', contact:'Miora Rasoanaivo', tel:'034 98 765 43', email:'miora.auto@yahoo.fr', adresse:'Toamasina', remise:0 },
+      { nom:'SOMACOA Transport', contact:'Njaka Rabe', tel:'033 22 111 00', email:'contact@somacoa.mg', adresse:'Tanjombato, Antananarivo', remise:8 },
+      { nom:'Auto Pièces Fenosoa', contact:'Fenosoa Ravelojaona', tel:'032 55 666 77', email:'', adresse:'Mahajanga', remise:0 },
+      { nom:'Garage Tsara Kanto', contact:'Tsiory Rakotondrabe', tel:'034 33 444 55', email:'tsarakanto@gmail.com', adresse:'Fianarantsoa', remise:5 },
+      { nom:'Ranarison Transport', contact:'Hery Ranarison', tel:'033 66 777 88', email:'', adresse:'Ivato, Antananarivo', remise:0 },
+    ];
+    const clientIds = [];
+    for (const c of clientsData) clientIds.push(await API.saveClient(c));
+
+    // ---- Fournisseurs ----
+    const fournisseursData = [
+      { nom:'China Auto Parts Trading', pays:'Chine', devise:'USD', rating:4, delai:'35-45j', contact:'Li Wei', tel:'+86 138 0000 0001', conditions_paiement:'30% acompte, solde à l\'expédition' },
+      { nom:'Dubai Motors Import', pays:'Émirats Arabes Unis', devise:'USD', rating:4, delai:'20-30j', contact:'Ahmed Khalil', tel:'+971 50 123 4567', conditions_paiement:'Paiement à la commande' },
+      { nom:'Japan Parts Direct', pays:'Japon', devise:'USD', rating:5, delai:'40-50j', contact:'Tanaka Hiroshi', tel:'+81 90 1234 5678', conditions_paiement:'50% acompte, solde à réception' },
+      { nom:'Pièces Réunion Import', pays:'La Réunion', devise:'EUR', rating:5, delai:'10-15j', contact:'Marc Payet', tel:'+262 692 12 34 56', conditions_paiement:'30 jours' },
+      { nom:'Somaco Fournitures Auto', pays:'Madagascar', devise:'MGA', rating:3, delai:'2-5j', contact:'Rivo Andriamahefa', tel:'034 20 111 22', conditions_paiement:'Comptant' },
+      { nom:'Gulf Auto Spares', pays:'Émirats Arabes Unis', devise:'USD', rating:3, delai:'25-35j', contact:'Omar Saeed', tel:'+971 55 987 6543', conditions_paiement:'Paiement à la commande' },
+    ];
+    const fournIds = [];
+    for (const f of fournisseursData) fournIds.push(await API.saveFournisseur(f));
+
+    // ---- Commandes clients (+ 2 devis) ----
+    const commandes = [];
+    for (let i=0; i<12; i++) {
+      const nbLignes = 1 + Math.floor(Math.random()*3);
+      const lignes = Array.from({length:nbLignes}, () => { const p = rnd(PIECES); return { designation:p.designation, reference:p.reference, marque:p.marque, quantite:1+Math.floor(Math.random()*4), prix_unitaire:p.prix }; });
+      const isDevis = i>=10;
+      const header = {
+        client_id: clientIds[i % clientIds.length],
+        date_cmd: days(90 - i*6),
+        type: isDevis ? 'Devis' : 'Commande',
+        priorite: Math.random()>0.75 ? 'Urgente' : 'Normale',
+        statut: isDevis ? 'Devis' : rnd(['En cours','En cours','Livré','Livré','Impayé']),
+        observations: Math.random()>0.6 ? 'Client à rappeler avant expédition' : '',
+      };
+      const r = await API.saveCommande({ header, lignes }, user);
+      commandes.push({ ...r, client_id: header.client_id, lignes });
+    }
+
+    // ---- Cotations (demandes de prix) avec offres, certaines choisies ----
+    for (let i=0; i<8; i++) {
+      const p = rnd(PIECES);
+      const nbOffres = 2 + Math.floor(Math.random()*2);
+      const offreFourns = [...fournIds].sort(()=>Math.random()-0.5).slice(0, nbOffres);
+      const offres = offreFourns.map((fid, idx) => ({
+        fournisseur_id: fid,
+        prix: Math.round(p.prix*0.55*(0.85+Math.random()*0.4)),
+        devise: rnd(['USD','EUR','MGA']),
+        disponibilite: rnd(['En stock','Sur commande','En stock']),
+        delai: rnd(['10j','15j','25j','30j','45j']),
+        remarques: idx===0 ? 'Prix négociable en gros volume' : '',
+      }));
+      const { id } = await API.saveCotation({ header:{ designation:p.designation, reference:p.reference, quantite:5+Math.floor(Math.random()*20), statut:'En cours' }, offres }, user);
+      if (Math.random()>0.3) {
+        const cot = (await db.query('SELECT id FROM cotation_offres WHERE cotation_id=$1 ORDER BY prix ASC LIMIT 1', [id]))[0];
+        if (cot) await API.choisirOffre(id, cot.id);
+      }
+    }
+
+    // ---- Commandes fournisseur (regroupant des commandes clients) + réceptions ----
+    const cmdFournisseurs = [];
+    for (let i=0; i<6; i++) {
+      const nbLignes = 2 + Math.floor(Math.random()*3);
+      const lignes = Array.from({length:nbLignes}, () => { const p = rnd(PIECES); return { designation:p.designation, reference:p.reference, quantite:2+Math.floor(Math.random()*6), prix_unitaire:Math.round(p.prix*0.55) }; });
+      const clientIdsForCf = commandes.filter(c=>c.numero).slice(i*2, i*2+2).map(c=>c.id);
+      const header = {
+        fournisseur_id: fournIds[i % fournIds.length],
+        date_cmd: days(70 - i*8),
+        devise: rnd(['USD','EUR','MGA']),
+        statut: rnd(['Préparation','En transit','En transit','Livré']),
+        conditions_paiement: rnd(['Comptant','30 jours','50% acompte']),
+        observations:'',
+      };
+      const r = await API.saveCmdFournisseur({ header, lignes, client_ids: clientIdsForCf }, user);
+      cmdFournisseurs.push({ ...r, statut: header.statut, lignes });
+    }
+    for (let i=0; i<5; i++) {
+      const cf = cmdFournisseurs[i];
+      if (!cf) continue;
+      const complet = i<3;
+      const lignesRec = cf.lignes.map(l => ({ designation:l.designation, reference:l.reference, quantite_commandee:l.quantite, quantite_recue: complet ? l.quantite : Math.max(0, l.quantite-1) }));
+      await API.saveReception({ header:{ cmd_fournisseur_id: cf.id, date_reception: days(60-i*8), observations:'', frais:{ transport: 80000+Math.floor(Math.random()*120000), import: complet?60000:0, autres: 15000 } }, lignes: lignesRec }, user);
+    }
+
+    // ---- Factures + paiements ----
+    for (let i=0; i<8; i++) {
+      const cmd = commandes[i];
+      if (!cmd || !cmd.lignes) continue;
+      const lignesFacture = cmd.lignes.map(l => ({ designation:l.designation, reference:l.reference, quantite:l.quantite, prix_unitaire:l.prix_unitaire, cout_unitaire:Math.round(l.prix_unitaire*0.65) }));
+      const statut = rnd(['Payée','Payée','Impayée','Partiellement payée']);
+      const { id, numero } = await API.saveFacture({ header:{ client_id: cmd.client_id, commande_id: cmd.id, date_facture: days(80-i*7), statut } }, user);
+      const totalFacture = lignesFacture.reduce((s,l)=>s+l.quantite*l.prix_unitaire,0);
+      if (statut==='Payée') {
+        await API.savePaiement({ type:'client', tiers_id:cmd.client_id, reference_doc:numero, montant:totalFacture, mode:rnd(['Espèces','Mvola','Virement']), date_paiement:days(75-i*7), statut:'Payé' }, user);
+      } else if (statut==='Partiellement payée') {
+        await API.savePaiement({ type:'client', tiers_id:cmd.client_id, reference_doc:numero, montant:Math.round(totalFacture*0.5), mode:'Mvola', date_paiement:days(70-i*7), statut:'Payé' }, user);
+      }
+    }
+    // Paiements fournisseurs (échéances)
+    for (let i=0; i<5; i++) {
+      const cf = cmdFournisseurs[i];
+      if (!cf) continue;
+      const delai = rnd([0,30,45,60]);
+      const echeance = new Date(); echeance.setDate(echeance.getDate() + (delai - (10+i*5)));
+      await API.savePaiement({ type:'fournisseur', tiers_nom: fournisseursData[i % fournisseursData.length].nom, reference_doc: cf.numero, montant: 400000+Math.floor(Math.random()*800000), mode:rnd(['Virement','Chèque','Crédit']), echeance: echeance.toISOString().slice(0,10), statut: i<3 ? 'Payé' : 'En attente' }, user);
+    }
+
+    // ---- Expéditions ----
+    const transports = ['Taxi-brousse','Transporteur','Retrait sur place'];
+    for (let i=0; i<6; i++) {
+      const cid = clientIds[i % clientIds.length];
+      const cmdIds = commandes.filter(c=>c.client_id===cid).map(c=>c.id);
+      if (!cmdIds.length) continue;
+      await API.saveExpedition({ header:{ client_id:cid, transport:rnd(transports), date_exp:days(40-i*6), statut:rnd(['Préparée','Expédiée','Livrée']), no_colis:'COL-'+(2000+i*17), observations:'' }, commande_ids: cmdIds.slice(0,2) }, user);
+    }
+
+    await logEvent(uid, unom, 'Chargement des données de démonstration');
+    return { ok:true };
+  },
+
+  // Réinitialisation : supprime toutes les données métier (clients, commandes, factures, ...).
+  // Conserve les comptes utilisateurs et la configuration entreprise.
+  resetData: async (user) => {
+    const RESET_TABLES = BACKUP_TABLES.filter(t => t!=='utilisateurs' && t!=='config');
+    const client = await db.getPool().connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL session_replication_role = replica');
+      for (const t of [...RESET_TABLES].reverse()) await client.query('DELETE FROM '+t);
+      for (const t of RESET_TABLES) {
+        if (t==='cmd_fourn_clients' || t==='expedition_commandes') continue;
+        const seq = (await client.query(`SELECT pg_get_serial_sequence('${t}','id') AS s`)).rows[0];
+        if (seq && seq.s) await client.query(`SELECT setval($1, 1, false)`, [seq.s]);
+      }
+      await client.query('COMMIT');
+    } catch(e){ try{ await client.query('ROLLBACK'); }catch{} throw e; }
+    finally { client.release(); }
+    await logEvent(user?user.id:null, user?user.nom:null, 'Réinitialisation des données');
+    return { ok:true };
+  },
+
   // ---------- Import / Export ----------
   // Construit un fichier Excel à partir d'un tableau de lignes (objets) → renvoie du base64.
   // Le front le télécharge (voir src/lib/files.js).

@@ -37,9 +37,12 @@ async function init(){
 
   const bcrypt = require('bcryptjs');
   const admins = await query('SELECT id FROM utilisateurs LIMIT 1');
-  if (admins.length === 0) {
-    await query("INSERT INTO utilisateurs (nom, login, mdp_hash, role) VALUES ($1,$2,$3,'admin')",
+  const baseFraiche = admins.length === 0;
+  let adminUser = null;
+  if (baseFraiche) {
+    const r = await query("INSERT INTO utilisateurs (nom, login, mdp_hash, role) VALUES ($1,$2,$3,'admin') RETURNING id, nom",
       ['Administrateur', 'admin', bcrypt.hashSync('admin', 10)]);
+    adminUser = r[0];
   }
   const cfg = await query('SELECT id FROM config WHERE id=1');
   if (cfg.length === 0) {
@@ -50,6 +53,14 @@ async function init(){
   let groqKey = '';
   try { groqKey = require('./groq-key.local.cjs'); } catch { console.warn('[AUTOPARTS] groq-key.local.cjs introuvable — module IA désactivé.'); }
   if (groqKey) await query("UPDATE config SET grok_key=$1, grok_model='llama-3.3-70b-versatile' WHERE id=1", [groqKey]);
+
+  // Base fraîchement créée (première installation) : on la peuple avec des données
+  // de démonstration pour que le client puisse tester tous les modules immédiatement.
+  // Ne s'exécute jamais sur une base déjà utilisée (ex. après une réinitialisation).
+  if (baseFraiche) {
+    try { await require('./api.cjs').seedDemoData(adminUser); }
+    catch (e) { console.warn('[AUTOPARTS] seedDemoData ignoré :', e.message); }
+  }
 }
 
 module.exports = { getPool, query, init };

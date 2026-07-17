@@ -15,7 +15,6 @@ dist-ssr
 
 # Secrets / build artifacts (jamais versionnés)
 electron/groq-key.local.cjs
-pg-portable/
 release/
 
 # Notes internes / contrat client (jamais versionnées — infos privées + repo public)

@@ -55,6 +55,21 @@ export default function Parametres() {
   const fmtSize = (n) => n>1048576 ? (n/1048576).toFixed(1)+' Mo' : Math.max(1,Math.round(n/1024))+' Ko'
   const fmtWhen = (iso) => { try { return new Date(iso).toLocaleString('fr-FR') } catch { return iso } }
 
+  // Données de démonstration / Réinitialisation
+  async function loadDemo() {
+    if (!confirm('Charger des données de démonstration (clients, commandes, factures, ...) ?\n\nUtile pour tester le logiciel. À faire uniquement sur une base vide ou de test.')) return
+    setBkBusy('Chargement des données de démonstration…')
+    try { await API.seedDemoData(currentUser); alert('Données de démonstration chargées. L\'application va se recharger.'); window.location.reload() }
+    catch (e) { setBkBusy('❌ ' + (e.message || e)) }
+  }
+  async function resetAll() {
+    if (!confirm('⚠️ RÉINITIALISER TOUTES LES DONNÉES ?\n\nClients, commandes, devis, factures, paiements, expéditions... tout sera supprimé définitivement.\nLes comptes utilisateurs et les paramètres entreprise seront conservés.\n\nFaites une sauvegarde avant si besoin. Continuer ?')) return
+    if (!confirm('Dernière confirmation : cette action est IRRÉVERSIBLE. Réinitialiser maintenant ?')) return
+    setBkBusy('Réinitialisation en cours…')
+    try { await API.resetData(currentUser); alert('Données réinitialisées. L\'application va se recharger.'); window.location.reload() }
+    catch (e) { setBkBusy('❌ ' + (e.message || e)) }
+  }
+
   return <>
     <div className="tabs">
       {tabs.map(t=><div key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{t}</div>)}
@@ -188,6 +203,22 @@ export default function Parametres() {
             <button className="btn btn-o btn-sm" onClick={()=>restore(b)}><Upload size={14}/> Restaurer</button>
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Données de test</div>
+        <div className="ai-box">Chargez un jeu de <b>données de démonstration</b> (clients, fournisseurs, commandes, devis, factures, paiements, expéditions) pour explorer tous les modules du logiciel.</div>
+        <button className="btn btn-o" style={{marginTop:10}} onClick={loadDemo}><Plus size={16}/> Charger des données de démonstration</button>
+      </div>
+
+      <div className="card" style={{border:'1px solid #7f1d1d'}}>
+        <div className="card-title" style={{color:'#fca5a5'}}><Shield size={18}/> Zone de réinitialisation</div>
+        <div className="ai-box" style={{background:'#450a0a',color:'#fecaca'}}>
+          Supprime <b>définitivement</b> toutes les données métier (clients, commandes, devis, factures, paiements, expéditions).
+          Les comptes utilisateurs et les paramètres entreprise sont conservés. Utile avant de démarrer l'utilisation réelle,
+          après avoir testé le logiciel avec les données de démonstration.
+        </div>
+        <button className="btn btn-danger" style={{marginTop:10,background:'#7f1d1d',color:'#fecaca',border:'1px solid #991b1b'}} onClick={resetAll}>Réinitialiser toutes les données</button>
       </div>
     </div>}
   </>
