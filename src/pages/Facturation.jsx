@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { FileText, Search, Plus, Eye, X, Calculator, Trash2, Printer } from 'lucide-react'
-import { API, currentUser, fmtAr, fmtDate } from '../lib/api'
-import { printDocument } from '../lib/files'
+import { API, currentUser, fmtAr, fmtArFull, fmtDate } from '../lib/api'
+import { printDocument, getLogoBase64 } from '../lib/files'
 
 const tabs = ['Toutes','Impayée','Partielle','Payée']
 const badge = s => s==='Payée'?'b-g':s==='Partielle'?'b-y':'b-r'
@@ -24,34 +24,94 @@ export default function Facturation() {
   useEffect(() => { load() }, [load])
   useEffect(() => { if (API) { API.getCommandes({ statut:'Toutes' }).then(setCommandes); API.getConfig().then(c=>setCfg(c||{})) } }, [])
 
-  function imprimerFacture(f) {
+  async function imprimerFacture(f) {
     const paye = (f.paiements||[]).filter(p=>p.statut==='Payé').reduce((s,p)=>s+Number(p.montant||0),0)
     const reste = Number(f.total_ht||0) - paye
-    const lignes = (f.lignes||[]).map(l=>`<tr><td>${l.designation||''}</td><td>${l.reference||''}</td><td class="r">${l.quantite}</td><td class="r">${fmtAr(l.prix_unitaire)}</td><td class="r">${fmtAr(l.montant)}</td></tr>`).join('')
-    printDocument('Facture '+f.numero, `
-      <div class="row">
-        <div class="box"><h1>${cfg.nom||'ABS STORE PIECES AUTOS'}</h1>
-          <div class="sub">Distribution de pièces automobiles détachées</div>
-          ${cfg.adresse?cfg.adresse+'<br>':''}${cfg.tel?'Tél : '+cfg.tel+'<br>':''}${cfg.email?cfg.email+'<br>':''}
-          ${cfg.nif?'<b>NIF :</b> '+cfg.nif+'  ':''}${cfg.stat?'<b>STAT :</b> '+cfg.stat:''}
+    const logoSrc = await getLogoBase64()
+    const lignes = (f.lignes||[]).map((l,i)=>`<tr class="${i%2?'':'alt'}"><td class="c">${i+1}</td><td>${l.designation||''}</td><td>${l.reference||''}</td><td class="c">${l.quantite}</td><td class="r">${fmtArFull(l.prix_unitaire)}</td><td class="r">${fmtArFull(l.montant)}</td></tr>`).join('')
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Facture ${f.numero}</title>
+    <style>
+      @page{size:A4;margin:0}
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:"Segoe UI",system-ui,sans-serif;color:#1e293b;font-size:12px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .page{padding:40px 44px}
+      .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+      .head .title{font-size:40px;font-weight:800;letter-spacing:3px;color:#1a1a2e}
+      .head .title .num{display:block;font-size:13px;font-weight:600;letter-spacing:1px;color:#94a3b8;margin-top:4px}
+      .head img{width:84px;height:84px;object-fit:contain}
+      .accent{height:5px;background:#f5c518;border-radius:3px;margin:8px 0 26px}
+      .cols{display:flex;justify-content:space-between;gap:40px;margin-bottom:28px}
+      .col{font-size:12px;line-height:1.7}
+      .col .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#f5c518;font-weight:700;margin-bottom:5px}
+      .col .big{font-size:15px;font-weight:700;color:#1a1a2e}
+      .col .co-name{font-size:14px;font-weight:700;color:#1a1a2e;margin-bottom:2px}
+      .col.right{text-align:right}
+      .meta{display:flex;gap:26px;justify-content:flex-end;margin-bottom:6px;font-size:12px;color:#475569}
+      .meta b{color:#1a1a2e}
+      table{width:100%;border-collapse:collapse;margin-bottom:0}
+      thead th{background:#1a1a2e;color:#fff;padding:11px 14px;font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+      tbody td{padding:11px 14px;border-bottom:1px solid #e5e9f0;font-size:12px}
+      tbody tr.alt td{background:#f8fafc}
+      .c{text-align:center}
+      .r{text-align:right}
+      .totrow{display:flex;justify-content:flex-end;margin-top:22px}
+      .totbox{width:290px}
+      .tl{display:flex;justify-content:space-between;padding:7px 16px;font-size:13px;color:#475569}
+      .tl.total{background:#1a1a2e;color:#fff;font-weight:700;font-size:16px;border-radius:6px;padding:12px 16px;margin-top:6px}
+      .tl.total .amt{color:#f5c518}
+      .tl.rest{background:#fef3c7;color:#92400e;font-weight:700;border-radius:6px;padding:9px 16px;margin-top:6px}
+      .foot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:46px}
+      .thanks{font-size:13px;color:#1a1a2e;font-weight:600}
+      .thanks span{display:block;font-size:11px;color:#94a3b8;font-weight:400;margin-top:3px}
+      .sign{text-align:center;font-size:11px;color:#64748b}
+      .sign .line{width:170px;margin:44px auto 0;border-top:1.5px solid #1a1a2e}
+      @media screen{body{max-width:210mm;margin:16px auto;background:#fff;box-shadow:0 4px 30px rgba(0,0,0,.15)}}
+    </style></head><body>
+      <div class="page">
+        <div class="head">
+          <div class="title">FACTURE<span class="num">N° ${f.numero||''}</span></div>
+          ${logoSrc?`<img src="${logoSrc}"/>`:''}
         </div>
-        <div class="box" style="text-align:right">
-          <div style="font-size:26px;font-weight:800;color:#b45309">FACTURE</div>
-          <b>N° :</b> ${f.numero||''}<br><b>Date :</b> ${fmtDate(f.date_facture)}<br>
-          ${f.commande_numero?'<b>Commande :</b> '+f.commande_numero+'<br>':''}<b>Statut :</b> ${f.statut}
+        <div class="accent"></div>
+        <div class="cols">
+          <div class="col">
+            <div class="lbl">Facturé à</div>
+            <div class="big">${f.client_nom||'—'}</div>
+          </div>
+          <div class="col right">
+            <div class="co-name">ABS STORE</div>
+            ${cfg.adresse?'<div>'+cfg.adresse+'</div>':''}
+            ${cfg.tel?'<div>Tél : '+cfg.tel+'</div>':''}
+            ${cfg.email?'<div>'+cfg.email+'</div>':''}
+            ${cfg.nif?'<div><b>NIF :</b> '+cfg.nif+'</div>':''}
+            ${cfg.stat?'<div><b>STAT :</b> '+cfg.stat+'</div>':''}
+          </div>
+        </div>
+        <div class="meta">
+          <div><b>Date :</b> ${fmtDate(f.date_facture)}</div>
+          ${f.commande_numero?'<div><b>Commande :</b> '+f.commande_numero+'</div>':''}
+          <div><b>Statut :</b> ${f.statut}</div>
+        </div>
+        <table><thead><tr><th class="c" style="width:40px">N°</th><th>Désignation</th><th>Réf.</th><th class="c" style="width:50px">Qté</th><th class="r" style="width:120px">Prix unitaire</th><th class="r" style="width:120px">Montant</th></tr></thead><tbody>${lignes}</tbody></table>
+        <div class="totrow"><div class="totbox">
+          <div class="tl"><span>Sous-total</span><span>${fmtArFull(f.total_ht)}</span></div>
+          ${paye>0?`<div class="tl"><span>Payé</span><span>- ${fmtArFull(paye)}</span></div>`:''}
+          <div class="tl total"><span>TOTAL</span><span class="amt">${fmtArFull(f.total_ht)}</span></div>
+          ${paye>0?`<div class="tl rest"><span>Reste à payer</span><span>${fmtArFull(reste)}</span></div>`:''}
+        </div></div>
+        <div class="foot">
+          <div class="thanks">Merci de votre confiance.<span>ABS STORE — Spécialiste en pièces détachées</span></div>
+          <div class="sign">Signature &amp; cachet<div class="line"></div></div>
         </div>
       </div>
-      <div class="box" style="margin:6px 0 14px;padding:10px 14px;background:#fafafa;border-radius:8px">
-        <b>Facturé à :</b> ${f.client_nom||'—'}
-      </div>
-      <table><thead><tr><th>Désignation</th><th>Réf.</th><th class="r">Qté</th><th class="r">Prix unit.</th><th class="r">Montant</th></tr></thead><tbody>${lignes}</tbody></table>
-      <div class="tot">Total : ${fmtAr(f.total_ht)}</div>
-      ${paye>0?`<div style="text-align:right;font-size:13px;color:#555;margin-top:4px">Payé : ${fmtAr(paye)} &nbsp;·&nbsp; <b style="color:#b45309">Reste à payer : ${fmtAr(reste)}</b></div>`:''}
-      <div style="margin-top:34px;display:flex;justify-content:space-between">
-        <div class="box">Arrêtée la présente facture à la somme de :<br><b>${fmtAr(f.total_ht)}</b></div>
-        <div class="box" style="text-align:center">Signature &amp; cachet<br><br><br>____________________</div>
-      </div>
-      <div class="foot">${cfg.nom||'ABS STORE PIECES AUTOS'} — Merci de votre confiance</div>`)
+    <script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank', 'width=900,height=1000')
+    if (!w) { alert('Fenêtre d\'impression bloquée.'); URL.revokeObjectURL(url); return }
+    w.onload = () => URL.revokeObjectURL(url)
   }
 
   const stats = list.reduce((a,f)=>{

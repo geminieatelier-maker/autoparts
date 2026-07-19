@@ -26,17 +26,17 @@ export default function Login({ onLogin }) {
         <div style={{color:'#f5c518',fontSize:11,letterSpacing:2,textTransform:'uppercase',marginBottom:22}}>Pièces autos · ERP</div>
         <div style={{textAlign:'left',marginBottom:12}}>
           <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>Identifiant</label>
-          <input value={login} onChange={e=>setLogin(e.target.value)} autoFocus placeholder="admin" style={inp}/>
+          <input value={login} onChange={e=>setLogin(e.target.value)} autoFocus placeholder="Votre identifiant" style={inp}/>
         </div>
         <div style={{textAlign:'left',marginBottom:16}}>
           <label style={{fontSize:12,color:'#64748b',display:'block',marginBottom:4}}>Mot de passe</label>
-          <input type="password" value={mdp} onChange={e=>setMdp(e.target.value)} placeholder="••••" style={inp}/>
+          <input type="password" value={mdp} onChange={e=>setMdp(e.target.value)} placeholder="Votre mot de passe" style={inp}/>
         </div>
         <button className="btn btn-p" type="submit" disabled={busy} style={{width:'100%',justifyContent:'center',padding:11}}>
           <LogIn size={16}/> {busy ? 'Connexion...' : 'Se connecter'}
         </button>
         {err && <div style={{color:'#ef4444',fontSize:13,marginTop:12}}>{err}</div>}
-        <div style={{color:'#475569',fontSize:12,marginTop:16}}>Par défaut : admin / admin</div>
+        <div style={{color:'#475569',fontSize:11,marginTop:16}}>v1.0.3 · Powered by Datalio</div>
       </form>
     </div>
   )

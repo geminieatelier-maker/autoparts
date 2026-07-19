@@ -1,10 +1,10 @@
-import { Settings, Building2, DollarSign, Users, Shield, Palette, Download, Upload, Save, Plus } from 'lucide-react'
+import { Settings, Building2, Users, Shield, Download, Upload, Save, Plus } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { API, currentUser } from '../lib/api'
 
 export default function Parametres() {
   const [tab, setTab] = useState('Entreprise')
-  const tabs = ['Entreprise','Intelligence','Devises','Utilisateurs','Sécurité','Sauvegarde']
+  const tabs = ['Entreprise','Intelligence','Utilisateurs','Sécurité','Sauvegarde']
 
   const [cfg, setCfg] = useState(null)
   useEffect(() => { if (API) API.getConfig().then(c => setCfg(c || {})) }, [])
@@ -108,23 +108,6 @@ export default function Parametres() {
         (nécessite internet <u>pour cette seule fonction</u>). Tout le reste du logiciel fonctionne hors ligne.<br/><br/>
         Rendez-vous dans le menu <b>Intelligence</b> pour l'utiliser.
       </div>
-    </div>}
-
-    {tab === 'Devises' && <div className="card">
-      <div className="card-title"><DollarSign size={18}/> Taux de change</div>
-      <p style={{fontSize:12,color:'#64748b',marginBottom:14}}>Taux du jour pour conversion automatique (à venir)</p>
-      {[
-        { devise:'USD', taux:'4 620 Ar' },
-        { devise:'EUR', taux:'5 180 Ar' },
-        { devise:'CNY', taux:'640 Ar' },
-        { devise:'JPY', taux:'32 Ar' },
-      ].map((d,i)=>(
-        <div key={i} className="pay-row">
-          <div style={{fontSize:13,color:'#f8fafc',fontWeight:600}}>1 {d.devise}</div>
-          <div className="fg" style={{marginBottom:0,width:140}}><input defaultValue={d.taux} style={{textAlign:'right'}}/></div>
-        </div>
-      ))}
-      <button className="btn btn-p" style={{marginTop:14}}>Mettre à jour</button>
     </div>}
 
     {tab === 'Utilisateurs' && <div>

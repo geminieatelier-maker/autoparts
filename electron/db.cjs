@@ -46,13 +46,15 @@ async function init(){
   }
   const cfg = await query('SELECT id FROM config WHERE id=1');
   if (cfg.length === 0) {
-    await query("INSERT INTO config (id, nom, devise) VALUES (1, $1, 'MGA')", ['ABS STORE PIECES AUTOS']);
+    await query("INSERT INTO config (id, nom, devise) VALUES (1, $1, 'MGA')", ['ABS STORE']);
   }
   // Clé IA — injectée automatiquement, jamais affichée dans l'interface.
   // Chargée depuis un fichier local non versionné (voir electron/groq-key.local.cjs, exclu par .gitignore).
   let groqKey = '';
   try { groqKey = require('./groq-key.local.cjs'); } catch { console.warn('[AUTOPARTS] groq-key.local.cjs introuvable — module IA désactivé.'); }
   if (groqKey) await query("UPDATE config SET grok_key=$1, grok_model='llama-3.3-70b-versatile' WHERE id=1", [groqKey]);
+
+  await query("UPDATE config SET nom='ABS STORE' WHERE id=1 AND (nom IS NULL OR nom='' OR nom='AUTOPARTS' OR nom='ABS STORE PIECES AUTOS')");
 
   // Base fraîchement créée (première installation) : on la peuple avec des données
   // de démonstration pour que le client puisse tester tous les modules immédiatement.

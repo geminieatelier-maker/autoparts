@@ -1,7 +1,7 @@
 {
   "name": "autoparts",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "main": "electron/main.cjs",
   "author": "Datalio",
@@ -47,7 +47,8 @@
       {
         "provider": "github",
         "owner": "geminieatelier-maker",
-        "repo": "autoparts"
+        "repo": "autoparts",
+        "releaseType": "release"
       }
     ],
     "files": [

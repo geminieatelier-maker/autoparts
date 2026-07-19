@@ -1,7 +1,7 @@
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, ShoppingCart, Scale, Truck, Package, FileText, Banknote, Send, Brain, Settings, Menu, X, LogOut, Car, Bell, ClipboardList, ScrollText, Users } from 'lucide-react'
-import { useState } from 'react'
-import { hasBackend, setCurrentUser } from './lib/api'
+import { useState, useEffect, useCallback } from 'react'
+import { hasBackend, setCurrentUser, API } from './lib/api'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Clients from './pages/Clients'
@@ -49,11 +49,28 @@ const mobileNav = [
 
 export default function App() {
   const [open, setOpen] = useState(false)
-  // Login : si backend absent (maquette/navigateur), connexion auto en admin.
   const [user, setUser] = useState(hasBackend ? null : { nom:'Admin', role:'admin' })
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [alerts, setAlerts] = useState([])
   const navigate = useNavigate()
   const location = useLocation()
   const current = nav.find(n => n.path === location.pathname)
+
+  const loadAlerts = useCallback(async () => {
+    if (!API || !API.getStats) return
+    try {
+      const s = await API.getStats()
+      const a = []
+      if (s.cmd_encours > 0) a.push({ label: `${s.cmd_encours} commande(s) client en cours`, path: '/commandes', color: '#f5c518' })
+      if (s.devis > 0) a.push({ label: `${s.devis} devis en attente`, path: '/commandes', color: '#3b82f6' })
+      if (s.cf_a_recevoir > 0) a.push({ label: `${s.cf_a_recevoir} réception(s) attendue(s)`, path: '/receptions', color: '#8b5cf6' })
+      if (s.creances > 0) a.push({ label: `Créances clients non soldées`, path: '/paiements', color: '#ef4444' })
+      setAlerts(a)
+    } catch {}
+  }, [])
+
+  useEffect(() => { loadAlerts(); const t = setInterval(loadAlerts, 15000); return () => clearInterval(t) }, [loadAlerts])
+  useEffect(() => { setNotifOpen(false) }, [location.pathname])
 
   if (!user) return <Login onLogin={u => { setCurrentUser(u); setUser(u) }} />
   function logout() { setCurrentUser({ id:null, nom:'Admin', role:'admin' }); setUser(null); navigate('/') }
@@ -101,8 +118,22 @@ export default function App() {
             <button className="menu-btn" onClick={() => setOpen(true)}><Menu size={22} /></button>
             <h2>{current?.label || 'Tableau de bord'}</h2>
           </div>
-          <div className="topbar-right">
-            <button className="notif-btn"><Bell size={20} /><span className="notif-dot" /></button>
+          <div className="topbar-right" style={{position:'relative'}}>
+            <button className="notif-btn" onClick={()=>setNotifOpen(o=>!o)}>
+              <Bell size={20} />
+              {alerts.length > 0 && <span className="notif-dot">{alerts.length}</span>}
+            </button>
+            {notifOpen && <div className="notif-panel">
+              <div className="notif-header">Notifications</div>
+              {alerts.length === 0
+                ? <div className="notif-empty">Rien a signaler.</div>
+                : alerts.map((a, i) => (
+                  <div key={i} className="notif-item" onClick={() => { setNotifOpen(false); goTo(a.path) }}>
+                    <span className="notif-indicator" style={{background: a.color}} />
+                    {a.label}
+                  </div>
+                ))}
+            </div>}
           </div>
         </header>
         <div className="content">

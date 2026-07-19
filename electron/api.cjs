@@ -486,10 +486,16 @@ const API = {
     const c = (await db.query('SELECT grok_key, grok_model FROM config WHERE id=1'))[0] || {};
     if (!c.grok_key) { const e = new Error('Clé API Grok non configurée. Allez dans Paramètres → Intelligence pour la saisir.'); e.code='NO_KEY'; throw e; }
     const ctx = await API._contexteIA();
-    const sys = "Tu es l'assistant intelligent de l'ERP « ABS STORE PIECES AUTOS », un distributeur de pièces automobiles à Madagascar (devise Ariary/Ar). "
-      + "Tu aides à comparer les prix fournisseurs, conseiller le meilleur achat, calculer la rentabilité et détecter les anomalies de prix. "
-      + "Réponds en FRANÇAIS, de façon concise, concrète et chiffrée. Base-toi uniquement sur les données fournies ci-dessous. "
-      + "Si une donnée manque, dis-le simplement.\n\nDONNÉES ACTUELLES (JSON):\n" + JSON.stringify(ctx);
+    const sys = "Tu es l'assistant intelligent intégré au logiciel ABS STORE PIECES AUTOS, un distributeur de pièces automobiles à Madagascar (devise Ariary). "
+      + "Tu connais parfaitement l'activité de l'entreprise : ses clients, fournisseurs, commandes, factures et cotations.\n\n"
+      + "RÈGLES ABSOLUES :\n"
+      + "- Réponds en FRANÇAIS, de façon concise, concrète et chiffrée.\n"
+      + "- Tu as accès direct aux données de l'entreprise. Ne mentionne JAMAIS comment tu obtiens ces données (pas de « JSON », « données fournies », « base de données », « d'après les informations »).\n"
+      + "- Parle comme si tu connaissais l'entreprise de l'intérieur : « Vous avez 5 fournisseurs actifs », pas « Les données montrent 5 fournisseurs ».\n"
+      + "- Formate les montants en Ariary avec séparateurs (ex: 150 000 Ar).\n"
+      + "- Utilise des listes à puces et des phrases simples. Jamais de code ni de format technique.\n"
+      + "- Si une information n'est pas disponible, dis-le simplement.\n\n"
+      + "SITUATION ACTUELLE :\n" + JSON.stringify(ctx);
     let res;
     try {
       res = await fetch('https://api.groq.com/openai/v1/chat/completions', {

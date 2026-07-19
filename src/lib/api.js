@@ -24,12 +24,18 @@ export const hasBackend = !!API
 export let currentUser = { id: null, nom: 'Admin', role: 'admin' }
 export function setCurrentUser(u) { currentUser = u }
 
-// Formatage montant Ariary court (1.2M, 680k)
+// Formatage montant Ariary court (1.2M, 680k) — pour l'interface
 export function fmtAr(n) {
   n = Number(n || 0)
   if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + 'M Ar'
   if (n >= 1e3) return Math.round(n / 1e3) + 'k Ar'
   return Math.round(n) + ' Ar'
+}
+
+// Formatage montant complet avec séparateurs (pour documents imprimés)
+export function fmtArFull(n) {
+  n = Number(n || 0)
+  return Math.round(n).toLocaleString('fr-FR') + ' Ar'
 }
 export function fmtDate(d) {
   if (!d) return ''

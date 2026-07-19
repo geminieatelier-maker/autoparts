@@ -62,7 +62,8 @@ export default function Dashboard({ onNavigate }) {
         </div>
         <div className="card">
           <div className="card-title"><Brain size={18}/> Intelligence</div>
-          <div className="ai-box">Le module d'analyse (comparaison automatique des prix, conseils d'achat, rentabilité) sera activé prochainement.</div>
+          <div className="ai-box">Comparaison des prix, conseil d'achat, rentabilité et détection d'anomalies : consultez ces analyses dans le module Intelligence.</div>
+          <button className="btn btn-o btn-sm" style={{marginTop:10}} onClick={()=>onNavigate('/intelligence')}><Brain size={14}/> Ouvrir Intelligence</button>
         </div>
       </div>
     </div>

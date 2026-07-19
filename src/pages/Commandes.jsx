@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Plus, Search, Eye, FileText, X, Trash2, Download, Upload, Printer } from 'lucide-react'
-import { API, currentUser, fmtAr, fmtDate } from '../lib/api'
-import { exportExcel, importExcelFile, printDocument } from '../lib/files'
+import { API, currentUser, fmtAr, fmtArFull, fmtDate } from '../lib/api'
+import { exportExcel, importExcelFile, printDocument, getLogoBase64 } from '../lib/files'
 
 const tabs = ['Toutes','En cours','Devis','Livré','Impayé']
 const statutBadge = s => s==='Livré'?'b-g':s==='Impayé'?'b-r':s==='Devis'?'b-b':'b-y'
@@ -21,7 +21,8 @@ export default function Commandes() {
     setList(await API.getCommandes({ statut: tab, recherche: q }))
   }, [tab, q])
   useEffect(() => { load() }, [load])
-  useEffect(() => { if (API) API.getClients({}).then(setClients) }, [])
+  const [cfg, setCfg] = useState({})
+  useEffect(() => { if (API) { API.getClients({}).then(setClients); API.getConfig().then(c=>setCfg(c||{})) } }, [])
 
   function openNew() {
     setForm({ header:{ client_id:'', date_cmd:today(), type:'Commande', priorite:'Normale', statut:'En cours', observations:'' },
@@ -60,16 +61,33 @@ export default function Commandes() {
   function exportListe() {
     exportExcel(list.map(c=>({ 'N°':c.numero, Client:c.client_nom, Date:fmtDate(c.date_cmd), Articles:c.nb_lignes, Montant:Number(c.total), Priorité:c.priorite, Statut:c.statut })), 'commandes-clients.xlsx', 'Commandes')
   }
-  function imprimer(d) {
-    const lignes = (d.lignes||[]).map(l=>`<tr><td class="r">${l.quantite}</td><td>${l.reference||''}</td><td>${l.designation||''}</td><td>${l.marque||''}</td><td class="r">${fmtAr(l.prix_unitaire)}</td><td class="r">${fmtAr(Number(l.quantite)*Number(l.prix_unitaire))}</td></tr>`).join('')
+  async function imprimer(d) {
+    const nom = cfg.nom||'ABS STORE'
+    const logoSrc = await getLogoBase64()
+    const lignes = (d.lignes||[]).map((l,i)=>`<tr class="${i%2?'alt':''}"><td class="r">${l.quantite}</td><td>${l.reference||''}</td><td>${l.designation||''}</td><td>${l.marque||''}</td><td class="r">${fmtArFull(l.prix_unitaire)}</td><td class="r">${fmtArFull(Number(l.quantite)*Number(l.prix_unitaire))}</td></tr>`).join('')
     printDocument('Commande '+d.numero, `
-      <h1>BON DE COMMANDE</h1><div class="sub">ABS STORE PIECES AUTOS — Distribution de pièces automobiles</div>
-      <div class="row"><div class="box"><b>N° :</b> ${d.numero||''}<br><b>Date :</b> ${fmtDate(d.date_cmd)}<br><b>Type :</b> ${d.type||''}</div>
-      <div class="box" style="text-align:right"><b>Client :</b> ${d.client_nom||''}<br><b>Priorité :</b> ${d.priorite||''}<br><b>Statut :</b> ${d.statut||''}</div></div>
-      <table><thead><tr><th class="r">Qté</th><th>Réf.</th><th>Désignation</th><th>Marque</th><th class="r">P.U.</th><th class="r">Total</th></tr></thead><tbody>${lignes}</tbody></table>
-      <div class="tot">Total : ${fmtAr(d.total)}</div>
-      ${d.observations?`<div class="box" style="margin-top:10px"><b>Observations :</b> ${d.observations}</div>`:''}
-      <div class="foot">Document généré par ABS STORE PIECES AUTOS</div>`)
+      <div class="header-row">
+        <div class="company">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            ${logoSrc?`<img src="${logoSrc}" style="width:52px;height:52px;border-radius:10px;object-fit:cover"/>`:''}
+
+            <div><h1>${nom}</h1><div class="sub">Distribution de pièces automobiles détachées</div></div>
+          </div>
+        </div>
+        <div class="invoice-box">
+          <div class="invoice-title" style="font-size:22px">BON DE COMMANDE</div>
+          <table class="info-tbl">
+            <tr><td class="lbl">N°</td><td class="val">${d.numero||''}</td></tr>
+            <tr><td class="lbl">Date</td><td class="val">${fmtDate(d.date_cmd)}</td></tr>
+            <tr><td class="lbl">Type</td><td class="val">${d.type||''}</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="client-box"><b>Client :</b> ${d.client_nom||'—'} &nbsp;·&nbsp; <b>Priorité :</b> ${d.priorite||'—'} &nbsp;·&nbsp; <b>Statut :</b> ${d.statut||'—'}</div>
+      <table class="items"><thead><tr><th class="r">Qté</th><th>Réf.</th><th>Désignation</th><th>Marque</th><th class="r">P.U.</th><th class="r">Total</th></tr></thead><tbody>${lignes}</tbody></table>
+      <div class="totals"><div class="total-line"><span>Total</span><span>${fmtArFull(d.total)}</span></div></div>
+      ${d.observations?`<div class="client-box" style="margin-top:12px"><b>Observations :</b> ${d.observations}</div>`:''}
+      <div class="foot">Document généré par ${nom}</div>`)
   }
 
   // ---- Formulaire ----

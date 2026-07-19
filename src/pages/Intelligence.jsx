@@ -11,6 +11,24 @@ const rapides = [
   { icon: AlertTriangle, label: 'Détecter les anomalies de prix', fn: 'analyseAnomalies' },
 ]
 
+function formatIA(text) {
+  if (!text || typeof text !== 'string') return String(text||'')
+  let html = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/^(#{1,3})\s+(.+)$/gm, (_, h, t) => `<div style="font-weight:700;font-size:${h.length===1?'15px':'14px'};color:#f5c518;margin:10px 0 4px">${t}</div>`)
+    .replace(/^([A-ZÉÈÀÊÂ\s]{5,})$/gm, '<div style="font-weight:700;font-size:14px;color:#f5c518;margin:10px 0 4px">$1</div>')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/^[•●]\s?(.+)$/gm, '<div style="padding-left:12px;margin:2px 0">• $1</div>')
+    .replace(/^- (.+)$/gm, '<div style="padding-left:12px;margin:2px 0">• $1</div>')
+    .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="padding-left:12px;margin:2px 0">$1. $2</div>')
+    .replace(/→/g, '<span style="color:#f5c518">→</span>')
+    .replace(/⚠️/g, '<span style="color:#f59e0b">⚠️</span>')
+    .replace(/✅/g, '<span style="color:#22c55e">✅</span>')
+    .replace(/\n{2,}/g, '<div style="height:8px"></div>')
+    .replace(/\n/g, '<br/>')
+  return html
+}
+
 export default function Intelligence() {
   const [msgs, setMsgs] = useState([])
   const [q, setQ] = useState('')
@@ -67,12 +85,15 @@ export default function Intelligence() {
         </div>}
         {msgs.map((m,i)=>(
           <div key={i} style={{alignSelf: m.role==='user'?'flex-end':'flex-start', maxWidth:'85%'}}>
-            <div style={{
-              padding:'10px 14px', borderRadius:12, fontSize:14, lineHeight:1.55, whiteSpace:'pre-wrap',
-              background: m.role==='user'?'#f5c518':(m.role==='err'?'#7f1d1d':'#0f172a'),
-              color: m.role==='user'?'#0f172a':(m.role==='err'?'#fecaca':'#e2e8f0'),
-              border: m.role==='ia'?'1px solid #334155':'none'
-            }}>{m.text}</div>
+            {m.role==='ia' ? <div style={{
+              padding:'14px 16px', borderRadius:12, fontSize:13, lineHeight:1.65,
+              background:'#0f172a', color:'#e2e8f0', border:'1px solid #334155'
+            }} dangerouslySetInnerHTML={{__html: formatIA(m.text)}} />
+            : <div style={{
+              padding:'10px 14px', borderRadius:12, fontSize:14, lineHeight:1.55,
+              background: m.role==='user'?'#f5c518':'#7f1d1d',
+              color: m.role==='user'?'#0f172a':'#fecaca'
+            }}>{m.text}</div>}
             {m.offline && <div style={{fontSize:11,color:'#64748b',marginTop:3}}>🔒 Calcul local — hors ligne</div>}
           </div>
         ))}
