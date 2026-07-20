@@ -23,15 +23,50 @@ const BACKUP_TABLES = [
   'commandes_fournisseur','commande_fournisseur_lignes','cmd_fourn_clients',
   'receptions','reception_lignes',
   'factures','facture_lignes',
-  'paiements','expeditions','expedition_commandes','journal'
+  'paiements','expeditions','expedition_commandes','journal','connexions','corbeille'
 ];
 // Tables à clé série "id" dont la séquence doit être recalée après restauration.
 // (Exclut config = id fixe, et les tables à clé composite sans colonne id.)
 const BACKUP_NO_SERIAL = ['config','cmd_fourn_clients','expedition_commandes'];
 const BACKUP_SERIAL = BACKUP_TABLES.filter(t => !BACKUP_NO_SERIAL.includes(t));
 
-async function logEvent(userId, userNom, action){
-  try { await db.query('INSERT INTO journal (utilisateur_id, utilisateur_nom, action) VALUES ($1,$2,$3)', [userId||null, userNom||null, action]); } catch {}
+async function logEvent(userId, userNom, action, entiteType, entiteId, details){
+  try { await db.query('INSERT INTO journal (utilisateur_id, utilisateur_nom, action, entite_type, entite_id, details) VALUES ($1,$2,$3,$4,$5,$6)',
+    [userId||null, userNom||null, action, entiteType||null, entiteId||null, details||null]); } catch {}
+}
+
+const PERMISSIONS_DEFAUT = {
+  admin: {
+    dashboard:true, commandes:true, clients:true, comparateur:true, fournisseurs:true,
+    cmd_fournisseurs:true, receptions:true, facturation:true, paiements:true, expeditions:true,
+    intelligence:true, journal:true, parametres:true,
+    voir_marges:true, voir_prix_achat:true, voir_benefices:true, voir_stats_financieres:true,
+    voir_creances:true, gestion_utilisateurs:true, sauvegarde:true, restauration:true,
+  },
+  gestionnaire: {
+    dashboard:true, commandes:true, clients:true, comparateur:true, fournisseurs:true,
+    cmd_fournisseurs:true, receptions:true, facturation:true, paiements:true, expeditions:true,
+    intelligence:true, journal:true, parametres:true,
+    voir_marges:false, voir_prix_achat:false, voir_benefices:false, voir_stats_financieres:false,
+    voir_creances:true, gestion_utilisateurs:false, sauvegarde:false, restauration:false,
+  },
+  operateur: {
+    dashboard:true, commandes:true, clients:true, comparateur:false, fournisseurs:false,
+    cmd_fournisseurs:false, receptions:false, facturation:true, paiements:true, expeditions:false,
+    intelligence:false, journal:false, parametres:true,
+    voir_marges:false, voir_prix_achat:false, voir_benefices:false, voir_stats_financieres:false,
+    voir_creances:false, gestion_utilisateurs:false, sauvegarde:false, restauration:false,
+  },
+};
+
+function getPermissions(user) {
+  const role = user.role || 'operateur';
+  const base = { ...(PERMISSIONS_DEFAUT[role] || PERMISSIONS_DEFAUT.operateur) };
+  const overrides = user.permissions || {};
+  for (const k of Object.keys(overrides)) {
+    if (typeof overrides[k] === 'boolean') base[k] = overrides[k];
+  }
+  return base;
 }
 
 const API = {
@@ -39,8 +74,10 @@ const API = {
   login: async (login, mdp) => {
     const u = (await db.query('SELECT * FROM utilisateurs WHERE login=$1 AND actif=true', [login]))[0];
     if (!u || !bcrypt.compareSync(mdp, u.mdp_hash)) return null;
-    await logEvent(u.id, u.nom, 'Connexion');
-    return { id: u.id, nom: u.nom, login: u.login, role: u.role };
+    await logEvent(u.id, u.nom, 'Connexion', 'utilisateur', u.id);
+    try { await db.query('INSERT INTO connexions (utilisateur_id, utilisateur_nom) VALUES ($1,$2)', [u.id, u.nom]); } catch {}
+    const perms = getPermissions(u);
+    return { id: u.id, nom: u.nom, login: u.login, role: u.role, permissions: perms };
   },
   changePassword: async (userId, oldPwd, newPwd) => {
     const u = (await db.query('SELECT mdp_hash FROM utilisateurs WHERE id=$1', [userId]))[0];
@@ -48,18 +85,25 @@ const API = {
     await db.query('UPDATE utilisateurs SET mdp_hash=$1 WHERE id=$2', [bcrypt.hashSync(newPwd,10), userId]);
     return true;
   },
-  getUtilisateurs: () => db.query('SELECT id, login, nom, role, actif FROM utilisateurs ORDER BY nom'),
+  getUtilisateurs: () => db.query('SELECT id, login, nom, role, actif, permissions FROM utilisateurs ORDER BY nom'),
   saveUtilisateur: async (u) => {
+    const perms = u.permissions ? JSON.stringify(u.permissions) : '{}';
     if (u.id) {
-      if (u.mdp) await db.query('UPDATE utilisateurs SET login=$1,nom=$2,role=$3,actif=$4,mdp_hash=$5 WHERE id=$6',
-        [u.login,u.nom,u.role,u.actif!==false,bcrypt.hashSync(u.mdp,10),u.id]);
-      else await db.query('UPDATE utilisateurs SET login=$1,nom=$2,role=$3,actif=$4 WHERE id=$5',
-        [u.login,u.nom,u.role,u.actif!==false,u.id]);
+      if (u.mdp) await db.query('UPDATE utilisateurs SET login=$1,nom=$2,role=$3,actif=$4,mdp_hash=$5,permissions=$6 WHERE id=$7',
+        [u.login,u.nom,u.role,u.actif!==false,bcrypt.hashSync(u.mdp,10),perms,u.id]);
+      else await db.query('UPDATE utilisateurs SET login=$1,nom=$2,role=$3,actif=$4,permissions=$5 WHERE id=$6',
+        [u.login,u.nom,u.role,u.actif!==false,perms,u.id]);
       return u.id;
     }
-    const r = await db.query('INSERT INTO utilisateurs (login,nom,role,mdp_hash) VALUES ($1,$2,$3,$4) RETURNING id',
-      [u.login,u.nom,u.role||'operateur',bcrypt.hashSync(u.mdp||'1234',10)]);
+    const r = await db.query('INSERT INTO utilisateurs (login,nom,role,mdp_hash,permissions) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      [u.login,u.nom,u.role||'operateur',bcrypt.hashSync(u.mdp||'1234',10),perms]);
     return r[0].id;
+  },
+  getPermissionsDefaut: () => PERMISSIONS_DEFAUT,
+  getPermissionsUtilisateur: async (userId) => {
+    const u = (await db.query('SELECT role, permissions FROM utilisateurs WHERE id=$1', [userId]))[0];
+    if (!u) return null;
+    return getPermissions(u);
   },
 
   // ---------- Config ----------
@@ -74,13 +118,71 @@ const API = {
     return db.query('SELECT * FROM clients WHERE actif=true ORDER BY nom');
   },
   saveClient: async (c) => {
-    if (c.id) { await db.query('UPDATE clients SET nom=$1,contact=$2,tel=$3,email=$4,adresse=$5,remise=$6,notes=$7 WHERE id=$8',
-      [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes,c.id]); return c.id; }
-    const r = await db.query('INSERT INTO clients (nom,contact,tel,email,adresse,remise,notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-      [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes]);
+    if (c.id) { await db.query('UPDATE clients SET nom=$1,contact=$2,tel=$3,email=$4,adresse=$5,remise=$6,notes=$7,contact2=$8,tel2=$9 WHERE id=$10',
+      [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes,c.contact2||'',c.tel2||'',c.id]); return c.id; }
+    const r = await db.query('INSERT INTO clients (nom,contact,tel,email,adresse,remise,notes,contact2,tel2) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+      [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes,c.contact2||'',c.tel2||'']);
     return r[0].id;
   },
-  deleteClient: (id) => db.query('UPDATE clients SET actif=false WHERE id=$1', [id]),
+  deleteClient: async (id, user) => {
+    const row = (await db.query('SELECT * FROM clients WHERE id=$1', [id]))[0];
+    if (row) {
+      await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+        ['client', id, row.nom, JSON.stringify({ header: row }), user?user.id:null, user?user.nom:null]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Suppression client '+row.nom, 'client', id);
+    }
+    return db.query('UPDATE clients SET actif=false WHERE id=$1', [id]);
+  },
+
+  // Lit un fichier Excel de clients (Uint8Array/Array de bytes) et reconnaît les colonnes
+  // même si les intitulés varient légèrement (accents/casse ignorés). Renvoie des objets client.
+  lireClientsExcel: (bytes) => {
+    const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes || []);
+    const wb = XLSX.read(data, { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    if (!rows.length) return [];
+    const keys = Object.keys(rows[0]);
+    const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const is2 = k => /\b2\b|secondaire|bis|suppl|autre/.test(norm(k));
+    const findAll = (re) => keys.filter(k => norm(k).match(re));
+    const findOne = (re, excl) => keys.find(k => norm(k).match(re) && (!excl || !norm(k).match(excl))) || null;
+    const kNom   = findOne(/client|raison|societe|entreprise/) || findOne(/nom/, /contact/);
+    const contactCols = findAll(/contact|personne/);
+    const telCols     = findAll(/tel|phone|gsm|mobile|portable/);
+    const kCont1 = contactCols.filter(k=>!is2(k)), kCont2 = contactCols.filter(is2);
+    const kTel1  = telCols.filter(k=>!is2(k)),     kTel2  = telCols.filter(is2);
+    const kMail = findOne(/mail|courriel/);
+    const kAdr  = findOne(/adr|lieu|ville|localit/);
+    const kRem  = findOne(/remise|reduc|discount|rabais/);
+    const kNote = findOne(/note|remarq|observ|comment/);
+    const pick = (cols) => (r) => cols.map(k => String(r[k]).trim()).filter(Boolean)[0] || '';
+    const num = v => Number(String(v).replace(/[^\d.,-]/g,'').replace(',','.')) || 0;
+    return rows.map(r => ({
+      nom:      kNom  ? String(r[kNom]).trim() : '',
+      contact:  pick(kCont1)(r),
+      contact2: pick(kCont2)(r),
+      tel:      pick(kTel1)(r),
+      tel2:     pick(kTel2)(r),
+      email:    kMail ? String(r[kMail]).trim() : '',
+      adresse:  kAdr  ? String(r[kAdr]).trim() : '',
+      remise:   kRem  ? num(r[kRem]) : 0,
+      notes:    kNote ? String(r[kNote]).trim() : '',
+    })).filter(c => c.nom);
+  },
+  // Insère une liste de clients en base ; ignore ceux dont le nom existe déjà. Renvoie {added, skipped}.
+  importClients: async (clients) => {
+    const existing = new Set((await db.query('SELECT lower(nom) AS n FROM clients WHERE actif=true')).map(r=>r.n));
+    let added = 0, skipped = 0;
+    for (const c of (clients||[])) {
+      const nom = String(c && c.nom || '').trim();
+      if (!nom) continue;
+      if (existing.has(nom.toLowerCase())) { skipped++; continue; }
+      await db.query('INSERT INTO clients (nom,contact,tel,email,adresse,remise,notes,contact2,tel2) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [nom, c.contact||'', c.tel||'', c.email||'', c.adresse||'', Number(c.remise)||0, c.notes||'', c.contact2||'', c.tel2||'']);
+      existing.add(nom.toLowerCase()); added++;
+    }
+    return { added, skipped };
+  },
 
   // ---------- Fournisseurs ----------
   getFournisseurs: (f={}) => {
@@ -95,13 +197,73 @@ const API = {
     return f;
   },
   saveFournisseur: async (f) => {
-    if (f.id) { await db.query('UPDATE fournisseurs SET nom=$1,pays=$2,devise=$3,rating=$4,delai=$5,contact=$6,tel=$7,email=$8,adresse=$9,conditions_paiement=$10,notes=$11 WHERE id=$12',
-      [f.nom,f.pays,f.devise,f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes,f.id]); return f.id; }
-    const r = await db.query('INSERT INTO fournisseurs (nom,pays,devise,rating,delai,contact,tel,email,adresse,conditions_paiement,notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id',
-      [f.nom,f.pays,f.devise||'MGA',f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes]);
+    if (f.id) { await db.query('UPDATE fournisseurs SET nom=$1,pays=$2,devise=$3,rating=$4,delai=$5,contact=$6,tel=$7,email=$8,adresse=$9,conditions_paiement=$10,notes=$11,contact2=$12,tel2=$13 WHERE id=$14',
+      [f.nom,f.pays,f.devise,f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes,f.contact2||'',f.tel2||'',f.id]); return f.id; }
+    const r = await db.query('INSERT INTO fournisseurs (nom,pays,devise,rating,delai,contact,tel,email,adresse,conditions_paiement,notes,contact2,tel2) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id',
+      [f.nom,f.pays,f.devise||'MGA',f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes,f.contact2||'',f.tel2||'']);
     return r[0].id;
   },
-  deleteFournisseur: (id) => db.query('UPDATE fournisseurs SET actif=false WHERE id=$1', [id]),
+  deleteFournisseur: async (id, user) => {
+    const row = (await db.query('SELECT * FROM fournisseurs WHERE id=$1', [id]))[0];
+    if (row) {
+      await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+        ['fournisseur', id, row.nom, JSON.stringify({ header: row }), user?user.id:null, user?user.nom:null]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Suppression fournisseur '+row.nom, 'fournisseur', id);
+    }
+    return db.query('UPDATE fournisseurs SET actif=false WHERE id=$1', [id]);
+  },
+  // Lit un fichier Excel de fournisseurs → objets fournisseur (colonnes reconnues automatiquement).
+  lireFournisseursExcel: (bytes) => {
+    const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes || []);
+    const wb = XLSX.read(data, { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    if (!rows.length) return [];
+    const keys = Object.keys(rows[0]);
+    const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const is2 = k => /\b2\b|secondaire|bis|suppl|autre/.test(norm(k));
+    const findAll = (re) => keys.filter(k => norm(k).match(re));
+    const findOne = (re, excl) => keys.find(k => norm(k).match(re) && (!excl || !norm(k).match(excl))) || null;
+    const kNom  = findOne(/fournisseur|raison|societe|entreprise/) || findOne(/nom/, /contact/);
+    const contactCols = findAll(/contact|personne/);
+    const telCols     = findAll(/tel|phone|gsm|mobile|portable/);
+    const kCont1 = contactCols.filter(k=>!is2(k)), kCont2 = contactCols.filter(is2);
+    const kTel1  = telCols.filter(k=>!is2(k)),     kTel2  = telCols.filter(is2);
+    const kPays = findOne(/pays|origine/);
+    const kDev  = findOne(/devise|monnaie|currency/);
+    const kDelai= findOne(/delai|lead|livraison/);
+    const kCond = findOne(/condition|paiement|payment/);
+    const kMail = findOne(/mail|courriel/);
+    const kAdr  = findOne(/adr|lieu|ville|localit/);
+    const kNote = findOne(/note|remarq|observ|comment/);
+    const pick = (cols) => (r) => cols.map(k => String(r[k]).trim()).filter(Boolean)[0] || '';
+    return rows.map(r => ({
+      nom:      kNom  ? String(r[kNom]).trim() : '',
+      pays:     kPays ? String(r[kPays]).trim() : '',
+      devise:   kDev  ? (String(r[kDev]).trim().toUpperCase().match(/USD|EUR|CNY|JPY/)?.[0] || 'MGA') : 'MGA',
+      delai:    kDelai? String(r[kDelai]).trim() : '',
+      conditions_paiement: kCond ? String(r[kCond]).trim() : '',
+      contact:  pick(kCont1)(r),
+      contact2: pick(kCont2)(r),
+      tel:      pick(kTel1)(r),
+      tel2:     pick(kTel2)(r),
+      email:    kMail ? String(r[kMail]).trim() : '',
+      adresse:  kAdr  ? String(r[kAdr]).trim() : '',
+      notes:    kNote ? String(r[kNote]).trim() : '',
+    })).filter(f => f.nom);
+  },
+  importFournisseurs: async (fournisseurs) => {
+    const existing = new Set((await db.query('SELECT lower(nom) AS n FROM fournisseurs WHERE actif=true')).map(r=>r.n));
+    let added = 0, skipped = 0;
+    for (const f of (fournisseurs||[])) {
+      const nom = String(f && f.nom || '').trim();
+      if (!nom) continue;
+      if (existing.has(nom.toLowerCase())) { skipped++; continue; }
+      await db.query('INSERT INTO fournisseurs (nom,pays,devise,delai,conditions_paiement,contact,tel,email,adresse,notes,contact2,tel2) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+        [nom, f.pays||'', f.devise||'MGA', f.delai||'', f.conditions_paiement||'', f.contact||'', f.tel||'', f.email||'', f.adresse||'', f.notes||'', f.contact2||'', f.tel2||'']);
+      existing.add(nom.toLowerCase()); added++;
+    }
+    return { added, skipped };
+  },
 
   // ---------- Module 1&2 : Commandes client / Devis ----------
   getCommandes: (f={}) => {
@@ -139,12 +301,22 @@ const API = {
           [id,l.designation||'',l.reference||'',l.marque||'',Number(l.quantite||0),Number(l.prix_unitaire||0),Number(l.quantite||0)*Number(l.prix_unitaire||0)]);
       }
       await db.query('COMMIT');
-      await logEvent(user?user.id:null, user?user.nom:null, (header.id?'Modif':'Création')+' commande client '+('CMD-'+String(id).padStart(3,'0')));
-      return { id, numero: 'CMD-'+String(id).padStart(3,'0') };
+      const num = 'CMD-'+String(id).padStart(3,'0');
+      await logEvent(user?user.id:null, user?user.nom:null, (header.id?'Modif':'Création')+' commande client '+num, 'commande_client', id);
+      return { id, numero: num };
     } catch(e){ await db.query('ROLLBACK'); throw e; }
   },
   updateCommandeStatut: (id, statut) => db.query('UPDATE commandes_client SET statut=$1 WHERE id=$2', [statut, id]),
-  deleteCommande: (id) => db.query('DELETE FROM commandes_client WHERE id=$1', [id]),
+  deleteCommande: async (id, user) => {
+    const row = (await db.query('SELECT * FROM commandes_client WHERE id=$1', [id]))[0];
+    if (row) {
+      const lignes = await db.query('SELECT * FROM commande_client_lignes WHERE commande_id=$1', [id]);
+      await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+        ['commande_client', id, row.numero, JSON.stringify({ header: row, lignes }), user?user.id:null, user?user.nom:null]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Suppression commande client '+row.numero, 'commande_client', id);
+    }
+    return db.query('DELETE FROM commandes_client WHERE id=$1', [id]);
+  },
 
   // ---------- Module 3 : Comparateur (cotations + offres) ----------
   getCotations: async () => {
@@ -172,7 +344,7 @@ const API = {
           [id,o.fournisseur_id||null,o.prix!=null?Number(o.prix):null,o.devise||null,o.disponibilite||null,o.delai||null,o.moq!=null?Number(o.moq):null,o.date_reception||null,o.remarques||null,!!o.choisi]);
       }
       await db.query('COMMIT');
-      await logEvent(user?user.id:null, user?user.nom:null, 'Demande de prix : '+header.designation);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Demande de prix : '+header.designation, 'cotation', id);
       return { id };
     } catch(e){ await db.query('ROLLBACK'); throw e; }
   },
@@ -186,7 +358,16 @@ const API = {
     } catch(e){ await db.query('ROLLBACK'); throw e; }
     return true;
   },
-  deleteCotation: (id) => db.query('DELETE FROM cotations WHERE id=$1', [id]),
+  deleteCotation: async (id, user) => {
+    const row = (await db.query('SELECT * FROM cotations WHERE id=$1', [id]))[0];
+    if (row) {
+      const offres = await db.query('SELECT * FROM cotation_offres WHERE cotation_id=$1', [id]);
+      await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+        ['cotation', id, row.designation, JSON.stringify({ header: row, offres }), user?user.id:null, user?user.nom:null]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Suppression cotation '+row.designation, 'cotation', id);
+    }
+    return db.query('DELETE FROM cotations WHERE id=$1', [id]);
+  },
 
   // ---------- Module 4 : Commandes fournisseur ----------
   getCmdFournisseurs: (f={}) => {
@@ -229,12 +410,22 @@ const API = {
         await db.query('INSERT INTO cmd_fourn_clients (cmd_fournisseur_id, commande_client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, cid]);
       }
       await db.query('COMMIT');
-      await logEvent(user?user.id:null, user?user.nom:null, (header.id?'Modif':'Création')+' commande fournisseur '+('CF-'+String(id).padStart(3,'0')));
-      return { id, numero: 'CF-'+String(id).padStart(3,'0') };
+      const numCf = 'CF-'+String(id).padStart(3,'0');
+      await logEvent(user?user.id:null, user?user.nom:null, (header.id?'Modif':'Création')+' commande fournisseur '+numCf, 'commande_fournisseur', id);
+      return { id, numero: numCf };
     } catch(e){ await db.query('ROLLBACK'); throw e; }
   },
   updateCmdFournisseurStatut: (id, statut) => db.query('UPDATE commandes_fournisseur SET statut=$1 WHERE id=$2', [statut, id]),
-  deleteCmdFournisseur: (id) => db.query('DELETE FROM commandes_fournisseur WHERE id=$1', [id]),
+  deleteCmdFournisseur: async (id, user) => {
+    const row = (await db.query('SELECT * FROM commandes_fournisseur WHERE id=$1', [id]))[0];
+    if (row) {
+      const lignes = await db.query('SELECT * FROM commande_fournisseur_lignes WHERE commande_id=$1', [id]);
+      await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+        ['commande_fournisseur', id, row.numero, JSON.stringify({ header: row, lignes }), user?user.id:null, user?user.nom:null]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Suppression commande fournisseur '+row.numero, 'commande_fournisseur', id);
+    }
+    return db.query('DELETE FROM commandes_fournisseur WHERE id=$1', [id]);
+  },
 
   // ---------- Module 5 : Réceptions ----------
   // Commandes fournisseur pas encore reçues (à réceptionner)
@@ -286,11 +477,20 @@ const API = {
         else if (statut==='Partielle') await db.query("UPDATE commandes_fournisseur SET statut='En transit' WHERE id=$1", [header.cmd_fournisseur_id]);
       }
       await db.query('COMMIT');
-      await logEvent(user?user.id:null, user?user.nom:null, 'Réception '+('REC-'+String(id).padStart(3,'0'))+' ('+statut+')');
+      await logEvent(user?user.id:null, user?user.nom:null, 'Réception '+('REC-'+String(id).padStart(3,'0'))+' ('+statut+')', 'reception', id);
       return { id, numero:'REC-'+String(id).padStart(3,'0'), statut };
     } catch(e){ await db.query('ROLLBACK'); throw e; }
   },
-  deleteReception: (id) => db.query('DELETE FROM receptions WHERE id=$1', [id]),
+  deleteReception: async (id, user) => {
+    const row = (await db.query('SELECT * FROM receptions WHERE id=$1', [id]))[0];
+    if (row) {
+      const lignes = await db.query('SELECT * FROM reception_lignes WHERE reception_id=$1', [id]);
+      await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+        ['reception', id, row.numero, JSON.stringify({ header: row, lignes }), user?user.id:null, user?user.nom:null]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Suppression réception '+row.numero, 'reception', id);
+    }
+    return db.query('DELETE FROM receptions WHERE id=$1', [id]);
+  },
 
   // ---------- Module 6 : Coût de revient ----------
   // Répartit les frais (transport/import/autres) au prorata de la valeur des lignes
@@ -329,7 +529,7 @@ const API = {
       return db.query(sql, params);
     },
     getFactureDetail: async (id) => {
-      const fa = (await db.query(`SELECT fa.*, c.nom AS client_nom, cc.numero AS commande_numero
+      const fa = (await db.query(`SELECT fa.*, c.nom AS client_nom, c.adresse AS client_adresse, c.tel AS client_tel, cc.numero AS commande_numero
         FROM factures fa
         LEFT JOIN clients c ON c.id=fa.client_id
         LEFT JOIN commandes_client cc ON cc.id=fa.commande_id
@@ -356,9 +556,20 @@ const API = {
             [id,l.designation||'',l.reference||'',q,pu,Number(l.cout_unitaire||0),q*pu]);
         }
         await db.query('COMMIT');
-        await logEvent(user?user.id:null, user?user.nom:null, 'Création facture '+numero);
+        await logEvent(user?user.id:null, user?user.nom:null, 'Création facture '+numero, 'facture', id);
         return { id, numero };
       } catch(e){ await db.query('ROLLBACK'); throw e; }
+    },
+    deleteFacture: async (id, user) => {
+      const row = (await db.query('SELECT * FROM factures WHERE id=$1', [id]))[0];
+      if (row) {
+        const lignes = await db.query('SELECT * FROM facture_lignes WHERE facture_id=$1', [id]);
+        await db.query('INSERT INTO corbeille (entite_type, entite_id, entite_label, donnees, supprime_par, supprime_par_nom) VALUES ($1,$2,$3,$4,$5,$6)',
+          ['facture', id, row.numero, JSON.stringify({ header: row, lignes }), user?user.id:null, user?user.nom:null]);
+        await logEvent(user?user.id:null, user?user.nom:null, 'Suppression facture '+row.numero, 'facture', id);
+      }
+      await db.query('DELETE FROM facture_lignes WHERE facture_id=$1', [id]);
+      return db.query('DELETE FROM factures WHERE id=$1', [id]);
     },
     updateFactureStatut: (id, statut) => db.query('UPDATE factures SET statut=$1 WHERE id=$2', [statut, id]),
   
@@ -372,7 +583,7 @@ const API = {
     savePaiement: async (p, user) => {
       const r = await db.query('INSERT INTO paiements (type,tiers_id,tiers_nom,reference_doc,montant,mode,echeance,date_paiement,statut) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
         [p.type||'client',p.tiers_id||null,p.tiers_nom||'',p.reference_doc||'',Number(p.montant||0),p.mode||'Espèces',p.echeance||null,p.date_paiement||null,p.statut||'Payé']);
-      await logEvent(user?user.id:null, user?user.nom:null, 'Paiement '+(p.type==='fournisseur'?'fournisseur ':'client ')+(p.reference_doc||'')+' '+Number(p.montant||0)+' Ar');
+      await logEvent(user?user.id:null, user?user.nom:null, 'Paiement '+(p.type==='fournisseur'?'fournisseur ':'client ')+(p.reference_doc||'')+' '+Number(p.montant||0)+' Ar', 'paiement', r[0].id);
       return { id: r[0].id };
     },
     updatePaiement: async (id, champs) => {
@@ -429,7 +640,7 @@ const API = {
           await db.query('INSERT INTO expedition_commandes (expedition_id, commande_client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, cid]);
         }
         await db.query('COMMIT');
-        await logEvent(user?user.id:null, user?user.nom:null, 'Création expédition '+numero);
+        await logEvent(user?user.id:null, user?user.nom:null, 'Création expédition '+numero, 'expedition', id);
         return { id, numero };
       } catch(e){ await db.query('ROLLBACK'); throw e; }
     },
@@ -457,7 +668,69 @@ const API = {
   },
 
   // ---------- Journal ----------
-  getJournal: () => db.query('SELECT * FROM journal ORDER BY created_at DESC LIMIT 300'),
+  getJournal: (limit) => db.query('SELECT * FROM journal ORDER BY created_at DESC LIMIT $1', [Number(limit)||300]),
+
+  // ---------- Historique des connexions ----------
+  getConnexions: (limit) => db.query('SELECT * FROM connexions ORDER BY created_at DESC LIMIT $1', [Number(limit)||200]),
+
+  // ---------- Corbeille ----------
+  getCorbeille: () => db.query('SELECT * FROM corbeille ORDER BY created_at DESC LIMIT 200'),
+  restaurerCorbeille: async (id, user) => {
+    const item = (await db.query('SELECT * FROM corbeille WHERE id=$1', [id]))[0];
+    if (!item) return { ok: false, erreur: 'Élément introuvable' };
+    const donnees = typeof item.donnees === 'string' ? JSON.parse(item.donnees) : item.donnees;
+    const h = donnees.header;
+    try {
+      if (item.entite_type === 'commande_client' && h) {
+        await db.query('INSERT INTO commandes_client (id,numero,client_id,date_cmd,type,priorite,statut,observations,total,utilisateur_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO NOTHING',
+          [h.id,h.numero,h.client_id,h.date_cmd,h.type,h.priorite,h.statut,h.observations,h.total,h.utilisateur_id,h.created_at]);
+        for (const l of (donnees.lignes||[])) {
+          await db.query('INSERT INTO commande_client_lignes (commande_id,designation,reference,marque,quantite,prix_unitaire,montant) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+            [h.id,l.designation,l.reference,l.marque,l.quantite,l.prix_unitaire,l.montant]);
+        }
+      } else if (item.entite_type === 'facture' && h) {
+        await db.query('INSERT INTO factures (id,numero,client_id,commande_id,date_facture,total_ht,marge,statut,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING',
+          [h.id,h.numero,h.client_id,h.commande_id,h.date_facture,h.total_ht,h.marge,h.statut,h.created_at]);
+        for (const l of (donnees.lignes||[])) {
+          await db.query('INSERT INTO facture_lignes (facture_id,designation,reference,quantite,prix_unitaire,cout_unitaire,montant) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+            [h.id,l.designation,l.reference,l.quantite,l.prix_unitaire,l.cout_unitaire,l.montant]);
+        }
+      } else if (item.entite_type === 'commande_fournisseur' && h) {
+        await db.query('INSERT INTO commandes_fournisseur (id,numero,fournisseur_id,date_cmd,devise,statut,conditions_paiement,observations,total,utilisateur_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO NOTHING',
+          [h.id,h.numero,h.fournisseur_id,h.date_cmd,h.devise,h.statut,h.conditions_paiement,h.observations,h.total,h.utilisateur_id,h.created_at]);
+        for (const l of (donnees.lignes||[])) {
+          await db.query('INSERT INTO commande_fournisseur_lignes (commande_id,designation,reference,quantite,prix_unitaire,montant) VALUES ($1,$2,$3,$4,$5,$6)',
+            [h.id,l.designation,l.reference,l.quantite,l.prix_unitaire,l.montant]);
+        }
+      } else if (item.entite_type === 'cotation' && h) {
+        await db.query('INSERT INTO cotations (id,designation,reference,quantite,statut,created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING',
+          [h.id,h.designation,h.reference,h.quantite,h.statut,h.created_at]);
+        for (const o of (donnees.offres||[])) {
+          await db.query('INSERT INTO cotation_offres (cotation_id,fournisseur_id,prix,devise,disponibilite,delai,moq,date_reception,remarques,choisi) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+            [h.id,o.fournisseur_id,o.prix,o.devise,o.disponibilite,o.delai,o.moq,o.date_reception,o.remarques,o.choisi]);
+        }
+      } else if (item.entite_type === 'reception' && h) {
+        await db.query('INSERT INTO receptions (id,numero,cmd_fournisseur_id,date_reception,statut,observations,utilisateur_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING',
+          [h.id,h.numero,h.cmd_fournisseur_id,h.date_reception,h.statut,h.observations,h.utilisateur_id,h.created_at]);
+        for (const l of (donnees.lignes||[])) {
+          await db.query('INSERT INTO reception_lignes (reception_id,designation,reference,quantite_commandee,quantite_recue,statut) VALUES ($1,$2,$3,$4,$5,$6)',
+            [h.id,l.designation,l.reference,l.quantite_commandee,l.quantite_recue,l.statut]);
+        }
+      } else if (item.entite_type === 'client' && h) {
+        await db.query('UPDATE clients SET actif=true WHERE id=$1', [h.id]);
+      } else if (item.entite_type === 'fournisseur' && h) {
+        await db.query('UPDATE fournisseurs SET actif=true WHERE id=$1', [h.id]);
+      }
+      await db.query('DELETE FROM corbeille WHERE id=$1', [id]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Restauration depuis corbeille : '+item.entite_type+' '+(item.entite_label||item.entite_id), item.entite_type, item.entite_id);
+      return { ok: true };
+    } catch (e) { return { ok: false, erreur: e.message }; }
+  },
+  viderCorbeille: async (user) => {
+    await db.query('DELETE FROM corbeille');
+    await logEvent(user?user.id:null, user?user.nom:null, 'Vidage de la corbeille');
+    return { ok: true };
+  },
 
   // ---------- Module 12 : Intelligence (Grok / xAI) ----------
   saveGrokConfig: (key, model) => db.query('UPDATE config SET grok_key=$1, grok_model=$2 WHERE id=1', [key||null, model||'grok-2-latest']),

@@ -29,7 +29,7 @@ export default function Comparateur() {
     setForm(null); load()
   }
   async function choisir(cotId, offreId) { await API.choisirOffre(cotId, offreId); load() }
-  async function remove(id) { if(!confirm('Supprimer cette demande de prix ?'))return; await API.deleteCotation(id); load() }
+  async function remove(id) { if(!confirm('Supprimer cette demande de prix ?'))return; await API.deleteCotation(id, currentUser); load() }
 
   // ---- Formulaire demande de prix ----
   if (form) return (

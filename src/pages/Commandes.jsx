@@ -49,7 +49,7 @@ export default function Commandes() {
     setForm(null); load()
   }
   async function changeStatut(s) { await API.updateCommandeStatut(detail.id, s); setDetail(await API.getCommandeDetail(detail.id)); load() }
-  async function remove() { if(!confirm('Supprimer cette commande ?'))return; await API.deleteCommande(detail.id); setDetail(null); load() }
+  async function remove() { if(!confirm('Supprimer cette commande ?'))return; await API.deleteCommande(detail.id, currentUser); setDetail(null); load() }
 
   async function onImport(e) {
     const file = e.target.files?.[0]; if (!file) return

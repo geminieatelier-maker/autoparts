@@ -8,7 +8,9 @@ const badge = s => s==='Payée'?'b-g':s==='Partielle'?'b-y':'b-r'
 const today = () => new Date().toISOString().slice(0,10)
 const inp = { background:'#0f172a', border:'1px solid #334155', borderRadius:6, padding:'6px 10px', color:'#f8fafc', fontSize:14, width:'100%' }
 
-export default function Facturation() {
+export default function Facturation({ perms = {} }) {
+  const showMarges = perms.voir_marges !== false
+  const showCout = perms.voir_prix_achat !== false
   const [tab, setTab] = useState('Toutes')
   const [q, setQ] = useState('')
   const [list, setList] = useState([])
@@ -78,6 +80,8 @@ export default function Facturation() {
           <div class="col">
             <div class="lbl">Facturé à</div>
             <div class="big">${f.client_nom||'—'}</div>
+            ${f.client_adresse?'<div>'+f.client_adresse+'</div>':''}
+            ${f.client_tel?'<div>Tél : '+f.client_tel+'</div>':''}
           </div>
           <div class="col right">
             <div class="co-name">ABS STORE</div>
@@ -184,12 +188,12 @@ export default function Facturation() {
         </div>
       </div>
       <div className="card">
-        <div className="card-title"><Calculator size={18}/> Lignes et marge</div>
+        <div className="card-title"><Calculator size={18}/> Lignes{showMarges ? ' et marge' : ''}</div>
         <div className="tbl-wrap">
           <table className="tbl">
-            <thead><tr><th>Pièce</th><th>Réf.</th><th>Qté</th><th>Coût</th><th>Prix vente</th><th>Marge</th><th></th></tr></thead>
+            <thead><tr><th>Pièce</th><th>Réf.</th><th>Qté</th>{showCout && <th>Coût</th>}<th>Prix vente</th>{showMarges && <th>Marge</th>}<th></th></tr></thead>
             <tbody>
-              {form.lignes.length===0 ? <tr><td colSpan={7} style={{color:'#64748b',textAlign:'center',padding:18}}>Sélectionnez une commande pour pré-remplir les lignes</td></tr> :
+              {form.lignes.length===0 ? <tr><td colSpan={showCout && showMarges ? 7 : 5} style={{color:'#64748b',textAlign:'center',padding:18}}>Sélectionnez une commande pour pré-remplir les lignes</td></tr> :
               form.lignes.map((l,i)=>{
                 const qte = Number(l.quantite||0)
                 const marge = (Number(l.prix_unitaire||0)-Number(l.cout_unitaire||0))*qte
@@ -197,9 +201,9 @@ export default function Facturation() {
                   <td><input value={l.designation} onChange={e=>setL(i,'designation',e.target.value)} style={inp}/></td>
                   <td><input value={l.reference} onChange={e=>setL(i,'reference',e.target.value)} style={{...inp,width:90}}/></td>
                   <td><input type="number" value={l.quantite} onChange={e=>setL(i,'quantite',e.target.value)} style={{...inp,width:70}}/></td>
-                  <td><input type="number" value={l.cout_unitaire} onChange={e=>setL(i,'cout_unitaire',e.target.value)} style={{...inp,width:110}}/></td>
+                  {showCout && <td><input type="number" value={l.cout_unitaire} onChange={e=>setL(i,'cout_unitaire',e.target.value)} style={{...inp,width:110}}/></td>}
                   <td><input type="number" value={l.prix_unitaire} onChange={e=>setL(i,'prix_unitaire',e.target.value)} style={{...inp,width:110}}/></td>
-                  <td style={{color:marge>=0?'#22c55e':'#ef4444',fontWeight:600}}>{fmtAr(marge)}</td>
+                  {showMarges && <td style={{color:marge>=0?'#22c55e':'#ef4444',fontWeight:600}}>{fmtAr(marge)}</td>}
                   <td><button className="btn btn-d btn-sm" onClick={()=>delL(i)}><Trash2 size={14}/></button></td>
                 </tr>
               })}
@@ -208,9 +212,9 @@ export default function Facturation() {
         </div>
         <button className="btn btn-o btn-sm" style={{marginTop:10}} onClick={addL}><Plus size={14}/> Ajouter une ligne</button>
         <div style={{display:'flex',justifyContent:'flex-end',gap:18,marginTop:12,flexWrap:'wrap',fontWeight:600}}>
-          <span style={{color:'#94a3b8'}}>Coût : {fmtAr(coutForm())}</span>
+          {showCout && <span style={{color:'#94a3b8'}}>Coût : {fmtAr(coutForm())}</span>}
           <span style={{color:'#f5c518'}}>Total : {fmtAr(totalForm())}</span>
-          <span style={{color:margeForm()>=0?'#22c55e':'#ef4444'}}>Marge : {fmtAr(margeForm())}</span>
+          {showMarges && <span style={{color:margeForm()>=0?'#22c55e':'#ef4444'}}>Marge : {fmtAr(margeForm())}</span>}
         </div>
       </div>
       <div style={{display:'flex',gap:10}}>
@@ -236,7 +240,7 @@ export default function Facturation() {
           <div className="fg"><label>Commande</label><input readOnly value={detail.commande_numero||'—'}/></div>
           <div className="fg"><label>Date</label><input readOnly value={fmtDate(detail.date_facture)}/></div>
           <div className="fg"><label>Total HT</label><input readOnly value={fmtAr(detail.total_ht)}/></div>
-          <div className="fg"><label>Marge</label><input readOnly value={fmtAr(detail.marge)}/></div>
+          {showMarges && <div className="fg"><label>Marge</label><input readOnly value={fmtAr(detail.marge)}/></div>}
           <div className="fg"><label>Payé</label><input readOnly value={fmtAr((detail.paiements||[]).filter(p=>p.statut==='Payé').reduce((s,p)=>s+Number(p.montant||0),0))}/></div>
         </div>
       </div>
@@ -244,10 +248,10 @@ export default function Facturation() {
         <div className="card-title">Articles ({detail.lignes.length})</div>
         <div className="tbl-wrap">
           <table className="tbl">
-            <thead><tr><th>Pièce</th><th>Réf.</th><th>Qté</th><th>Coût</th><th>PV</th><th>Montant</th><th>Marge</th></tr></thead>
+            <thead><tr><th>Pièce</th><th>Réf.</th><th>Qté</th>{showCout && <th>Coût</th>}<th>PV</th><th>Montant</th>{showMarges && <th>Marge</th>}</tr></thead>
             <tbody>{detail.lignes.map(l=><tr key={l.id}>
-              <td>{l.designation}</td><td>{l.reference}</td><td>{l.quantite}</td><td>{fmtAr(l.cout_unitaire)}</td><td>{fmtAr(l.prix_unitaire)}</td><td>{fmtAr(l.montant)}</td>
-              <td style={{color:'#22c55e',fontWeight:600}}>{fmtAr((Number(l.prix_unitaire||0)-Number(l.cout_unitaire||0))*Number(l.quantite||0))}</td>
+              <td>{l.designation}</td><td>{l.reference}</td><td>{l.quantite}</td>{showCout && <td>{fmtAr(l.cout_unitaire)}</td>}<td>{fmtAr(l.prix_unitaire)}</td><td>{fmtAr(l.montant)}</td>
+              {showMarges && <td style={{color:'#22c55e',fontWeight:600}}>{fmtAr((Number(l.prix_unitaire||0)-Number(l.cout_unitaire||0))*Number(l.quantite||0))}</td>}
             </tr>)}</tbody>
           </table>
         </div>
@@ -263,7 +267,7 @@ export default function Facturation() {
   return <>
     <div className="stats">
       <div className="stat"><div className="label">Total facturé</div><div className="value" style={{color:'#f8fafc'}}>{fmtAr(stats.total)}</div></div>
-      <div className="stat"><div className="label">Marge</div><div className="value" style={{color:'#22c55e'}}>{fmtAr(stats.marge)}</div></div>
+      {showMarges && <div className="stat"><div className="label">Marge</div><div className="value" style={{color:'#22c55e'}}>{fmtAr(stats.marge)}</div></div>}
       <div className="stat"><div className="label">Payé</div><div className="value" style={{color:'#3b82f6'}}>{fmtAr(stats.payees)}</div></div>
       <div className="stat"><div className="label">À suivre</div><div className="value" style={{color:'#f5c518'}}>{fmtAr(stats.reste)}</div></div>
     </div>
@@ -275,12 +279,12 @@ export default function Facturation() {
     <div className="card">
       <div className="tbl-wrap">
         <table className="tbl">
-          <thead><tr><th>N°</th><th>Client</th><th>Commande</th><th>Date</th><th>Montant</th><th>Marge</th><th>Statut</th><th></th></tr></thead>
+          <thead><tr><th>N°</th><th>Client</th><th>Commande</th><th>Date</th><th>Montant</th>{showMarges && <th>Marge</th>}<th>Statut</th><th></th></tr></thead>
           <tbody>
-            {list.length===0 ? <tr><td colSpan={8} style={{color:'#64748b',textAlign:'center',padding:20}}>Aucune facture</td></tr> :
+            {list.length===0 ? <tr><td colSpan={showMarges ? 8 : 7} style={{color:'#64748b',textAlign:'center',padding:20}}>Aucune facture</td></tr> :
             list.map(f=><tr key={f.id}>
               <td style={{color:'#f5c518'}}>{f.numero}</td><td>{f.client_nom||'—'}</td><td>{f.commande_numero||'—'}</td><td>{fmtDate(f.date_facture)}</td>
-              <td>{fmtAr(f.total_ht)}</td><td style={{color:'#22c55e',fontWeight:600}}>{fmtAr(f.marge)}</td>
+              <td>{fmtAr(f.total_ht)}</td>{showMarges && <td style={{color:'#22c55e',fontWeight:600}}>{fmtAr(f.marge)}</td>}
               <td><span className={`badge ${badge(f.statut)}`}>{f.statut}</span></td>
               <td><button className="btn btn-o btn-sm" onClick={()=>openDetail(f)}><Eye size={14}/> Voir</button></td>
             </tr>)}

@@ -36,7 +36,7 @@ export default function Login({ onLogin }) {
           <LogIn size={16}/> {busy ? 'Connexion...' : 'Se connecter'}
         </button>
         {err && <div style={{color:'#ef4444',fontSize:13,marginTop:12}}>{err}</div>}
-        <div style={{color:'#475569',fontSize:11,marginTop:16}}>v1.0.3 · Powered by Datalio</div>
+        <div style={{color:'#475569',fontSize:11,marginTop:16}}>v1.0.4 · Powered by Datalio</div>
       </form>
     </div>
   )

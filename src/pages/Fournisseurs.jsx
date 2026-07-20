@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Search, MapPin, Star, Phone, Mail, Plus, Edit, Trash2, FileText, X } from 'lucide-react'
-import { API, fmtAr, fmtDate } from '../lib/api'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, MapPin, Star, Phone, Mail, Plus, Edit, Trash2, FileText, X, Upload, Download } from 'lucide-react'
+import { API, fmtAr, fmtDate, currentUser } from '../lib/api'
+import { exportExcel, importFournisseursExcel } from '../lib/files'
 
-const emptyForm = { nom:'', pays:'', devise:'MGA', rating:3, delai:'', contact:'', tel:'', email:'', adresse:'', conditions_paiement:'', notes:'' }
+const emptyForm = { nom:'', pays:'', devise:'MGA', rating:3, delai:'', contact:'', tel:'', contact2:'', tel2:'', email:'', adresse:'', conditions_paiement:'', notes:'' }
+const deviseLabel = d => d==='MGA' ? 'Ariary' : d
 
 export default function Fournisseurs() {
   const [list, setList] = useState([])
@@ -10,11 +12,33 @@ export default function Fournisseurs() {
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(null)   // null | {objet}
 
+  const fileRef = useRef(null)
+
   const load = useCallback(async () => {
     if (!API) return
     setList(await API.getFournisseurs({ recherche: q }))
   }, [q])
   useEffect(() => { load() }, [load])
+
+  async function onImportFile(e) {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    try {
+      const rows = await importFournisseursExcel(file)
+      if (!rows.length) return alert('Aucun fournisseur trouvé dans le fichier. Vérifiez qu\'il contient au moins une colonne « Nom du fournisseur ».')
+      const res = await API.importFournisseurs(rows)
+      alert(`${res.added} fournisseur(s) importé(s).` + (res.skipped ? `\n${res.skipped} déjà existant(s), ignoré(s).` : ''))
+      load()
+    } catch (err) { alert('Échec de l\'import : ' + (err.message || err)) }
+  }
+  function telechargerModele() {
+    exportExcel([{
+      'Nom du fournisseur':'Guangzhou Auto Parts (exemple)', 'Pays':'Chine', 'Devise':'USD',
+      'Personne de contact':'Mr. Chen', 'Téléphone':'+86 20 ...', 'Personne de contact 2':'', 'Téléphone 2':'',
+      'Email':'contact@exemple.com', 'Adresse':'Guangzhou', 'Délai moyen':'15-20 jours',
+      'Conditions de paiement':'30 jours', 'Notes':'À remplacer par vos fournisseurs'
+    }], 'modele-fournisseurs.xlsx', 'Fournisseurs')
+  }
 
   async function openDetail(f) { setSelected(API ? await API.getFournisseurDetail(f.id) : f) }
   function openNew() { setForm({ ...emptyForm }) }
@@ -26,7 +50,7 @@ export default function Fournisseurs() {
   }
   async function remove(id) {
     if (!confirm('Supprimer ce fournisseur ?')) return
-    await API.deleteFournisseur(id); setSelected(null); load()
+    await API.deleteFournisseur(id, currentUser); setSelected(null); load()
   }
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -43,7 +67,7 @@ export default function Fournisseurs() {
           <div className="fg"><label>Pays</label><input value={form.pays||''} onChange={e=>set('pays',e.target.value)} placeholder="Ex: Chine"/></div>
           <div className="fg"><label>Devise</label>
             <select value={form.devise} onChange={e=>set('devise',e.target.value)}>
-              {['MGA','USD','EUR','CNY','JPY'].map(d=><option key={d}>{d}</option>)}
+              {['MGA','USD','EUR','CNY','JPY'].map(d=><option key={d} value={d}>{deviseLabel(d)}</option>)}
             </select>
           </div>
           <div className="fg"><label>Note (1 à 5)</label>
@@ -53,6 +77,8 @@ export default function Fournisseurs() {
           <div className="fg"><label>Conditions de paiement</label><input value={form.conditions_paiement||''} onChange={e=>set('conditions_paiement',e.target.value)} placeholder="Ex: 30 jours"/></div>
           <div className="fg"><label>Personne de contact</label><input value={form.contact||''} onChange={e=>set('contact',e.target.value)} placeholder="Nom du contact"/></div>
           <div className="fg"><label>Téléphone</label><input value={form.tel||''} onChange={e=>set('tel',e.target.value)} placeholder="+86 20 ..."/></div>
+          <div className="fg"><label>Personne de contact 2</label><input value={form.contact2||''} onChange={e=>set('contact2',e.target.value)} placeholder="2ᵉ contact (optionnel)"/></div>
+          <div className="fg"><label>Téléphone 2</label><input value={form.tel2||''} onChange={e=>set('tel2',e.target.value)} placeholder="2ᵉ numéro (optionnel)"/></div>
           <div className="fg"><label>Email</label><input value={form.email||''} onChange={e=>set('email',e.target.value)} placeholder="contact@fournisseur.com"/></div>
           <div className="fg"><label>Adresse</label><input value={form.adresse||''} onChange={e=>set('adresse',e.target.value)} placeholder="Adresse complète"/></div>
         </div>
@@ -79,7 +105,7 @@ export default function Fournisseurs() {
         </div>
         <div className="grid2">
           <div className="fg"><label>Pays</label><input readOnly value={selected.pays||'—'}/></div>
-          <div className="fg"><label>Devise</label><input readOnly value={selected.devise||'—'}/></div>
+          <div className="fg"><label>Devise</label><input readOnly value={deviseLabel(selected.devise)||'—'}/></div>
           <div className="fg"><label>Délai moyen</label><input readOnly value={selected.delai||'—'}/></div>
           <div className="fg"><label>Conditions paiement</label><input readOnly value={selected.conditions_paiement||'—'}/></div>
         </div>
@@ -87,7 +113,8 @@ export default function Fournisseurs() {
       <div className="card">
         <div className="card-title">Contact</div>
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,color:'#e2e8f0'}}><Phone size={16} color="#f5c518"/> {selected.tel||selected.contact||'—'}</div>
+          <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,color:'#e2e8f0'}}><Phone size={16} color="#f5c518"/> {selected.tel||'—'}{selected.contact?` · ${selected.contact}`:''}</div>
+          {(selected.tel2||selected.contact2) && <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,color:'#94a3b8'}}><Phone size={16} color="#94a3b8"/> {selected.tel2||'—'}{selected.contact2?` · ${selected.contact2}`:''}</div>}
           <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,color:'#e2e8f0'}}><Mail size={16} color="#f5c518"/> {selected.email||'—'}</div>
           <div style={{display:'flex',alignItems:'center',gap:8,fontSize:15,color:'#e2e8f0'}}><MapPin size={16} color="#f5c518"/> {selected.adresse||'—'}</div>
         </div>
@@ -111,6 +138,9 @@ export default function Fournisseurs() {
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
       <div className="search-bar" style={{marginBottom:0,flex:1,minWidth:200}}><Search size={16} color="#475569"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un fournisseur..."/></div>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{display:'none'}} onChange={onImportFile}/>
+      <button className="btn btn-o" onClick={telechargerModele} title="Télécharger un fichier Excel vierge au bon format"><Download size={16}/> Modèle Excel</button>
+      <button className="btn btn-o" onClick={()=>fileRef.current?.click()} title="Importer des fournisseurs depuis un fichier Excel"><Upload size={16}/> Importer Excel</button>
       <button className="btn btn-p" onClick={openNew}><Plus size={16}/> Ajouter fournisseur</button>
     </div>
     {list.length===0 ? <div className="card" style={{color:'#64748b'}}>Aucun fournisseur. Cliquez « Ajouter fournisseur ».</div> :
@@ -125,7 +155,7 @@ export default function Fournisseurs() {
             <div style={{display:'flex',gap:2}}>{[...Array(f.rating||0)].map((_,j)=><Star key={j} size={14} color="#f5c518" fill="#f5c518"/>)}</div>
           </div>
           <div style={{display:'flex',gap:14,fontSize:13,color:'#94a3b8',marginTop:6,flexWrap:'wrap'}}>
-            <span>Délai: {f.delai||'—'}</span><span>Devise: {f.devise}</span>
+            <span>Délai: {f.delai||'—'}</span><span>Devise: {deviseLabel(f.devise)}</span>
           </div>
         </div>
       ))}

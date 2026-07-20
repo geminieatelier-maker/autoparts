@@ -33,14 +33,15 @@ export default function Journal() {
       <div className="card-title"><ScrollText size={18}/> Journal système</div>
       <div className="tbl-wrap">
         <table className="tbl">
-          <thead><tr><th>Date / heure</th><th>Utilisateur</th><th>Action</th></tr></thead>
+          <thead><tr><th>Date / heure</th><th>Utilisateur</th><th>Action</th><th>Entité</th></tr></thead>
           <tbody>
-            {filtered.length===0 ? <tr><td colSpan={3} style={{color:'#64748b',textAlign:'center',padding:20}}>Aucun événement</td></tr> :
+            {filtered.length===0 ? <tr><td colSpan={4} style={{color:'#64748b',textAlign:'center',padding:20}}>Aucun événement</td></tr> :
             filtered.map(j=>(
               <tr key={j.id}>
                 <td style={{color:'#94a3b8'}}><Clock size={12} style={{verticalAlign:'-2px',marginRight:4}}/>{fmtDate(j.created_at)} {new Date(j.created_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</td>
                 <td><User size={12} style={{verticalAlign:'-2px',marginRight:4}}/>{j.utilisateur_nom||'—'}</td>
                 <td style={{color:'#f8fafc'}}>{j.action||'—'} <span style={{display:'none'}}>{fmtAr(0)}</span></td>
+                <td style={{color:'#94a3b8',fontSize:12}}>{j.entite_type ? <span className="badge b-b">{j.entite_type}{j.entite_id ? ' #'+j.entite_id : ''}</span> : ''}</td>
               </tr>
             ))}
           </tbody>

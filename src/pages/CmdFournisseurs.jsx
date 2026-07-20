@@ -38,7 +38,7 @@ export default function CmdFournisseurs() {
     setForm(null); load()
   }
   async function changeStatut(s){ await API.updateCmdFournisseurStatut(detail.id,s); setDetail(await API.getCmdFournisseurDetail(detail.id)); load() }
-  async function remove(){ if(!confirm('Supprimer cette commande fournisseur ?'))return; await API.deleteCmdFournisseur(detail.id); setDetail(null); load() }
+  async function remove(){ if(!confirm('Supprimer cette commande fournisseur ?'))return; await API.deleteCmdFournisseur(detail.id, currentUser); setDetail(null); load() }
 
   // ---- Formulaire ----
   if (form) return (

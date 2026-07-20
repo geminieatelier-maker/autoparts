@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS utilisateurs (
   login TEXT UNIQUE NOT NULL,
   nom TEXT,
   mdp_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'operateur',        -- admin | operateur
+  role TEXT DEFAULT 'operateur',        -- admin | gestionnaire | operateur
+  permissions JSONB DEFAULT '{}'::jsonb,
   actif BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -135,9 +136,35 @@ CREATE TABLE IF NOT EXISTS journal (
   utilisateur_id INT,
   utilisateur_nom TEXT,
   action TEXT,
+  entite_type TEXT,
+  entite_id INT,
+  details TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_journal_date ON journal(created_at);
+
+-- ---------- Historique des connexions ----------
+CREATE TABLE IF NOT EXISTS connexions (
+  id SERIAL PRIMARY KEY,
+  utilisateur_id INT,
+  utilisateur_nom TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_connexions_date ON connexions(created_at);
+
+-- ---------- Corbeille (soft delete) ----------
+CREATE TABLE IF NOT EXISTS corbeille (
+  id SERIAL PRIMARY KEY,
+  entite_type TEXT NOT NULL,
+  entite_id INT NOT NULL,
+  entite_label TEXT,
+  donnees JSONB NOT NULL,
+  supprime_par INT,
+  supprime_par_nom TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_corbeille_type ON corbeille(entite_type);
+CREATE INDEX IF NOT EXISTS idx_corbeille_date ON corbeille(created_at);
 
 -- ============================================================
 --  Module 5 : Réceptions  +  Module 6 : Coût de revient
@@ -250,3 +277,17 @@ ALTER TABLE commande_client_lignes ADD COLUMN IF NOT EXISTS marque TEXT;
 
 -- Numéro de colis / suivi sur les expéditions (cahier des charges point 9)
 ALTER TABLE expeditions ADD COLUMN IF NOT EXISTS no_colis TEXT;
+
+-- 2e personne de contact + 2e téléphone (clients & fournisseurs)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS contact2 TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS tel2 TEXT;
+ALTER TABLE fournisseurs ADD COLUMN IF NOT EXISTS contact2 TEXT;
+ALTER TABLE fournisseurs ADD COLUMN IF NOT EXISTS tel2 TEXT;
+
+-- Permissions JSONB sur utilisateurs (pour surcharges individuelles)
+ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'::jsonb;
+
+-- Enrichissement journal
+ALTER TABLE journal ADD COLUMN IF NOT EXISTS entite_type TEXT;
+ALTER TABLE journal ADD COLUMN IF NOT EXISTS entite_id INT;
+ALTER TABLE journal ADD COLUMN IF NOT EXISTS details TEXT;

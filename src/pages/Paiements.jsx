@@ -84,6 +84,7 @@ export default function Paiements() {
     setForm(null); load()
   }
   async function markPaid(p) {
+    if (!confirm('Confirmer le paiement de ' + (p.tiers_nom||'') + ' (' + (p.reference_doc||'') + ') ?')) return
     await API.updatePaiement(p.id, { statut:'Payé', date_paiement:today() })
     load()
   }

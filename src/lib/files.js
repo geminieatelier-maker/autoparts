@@ -50,6 +50,23 @@ export async function importExcelFile(file, articles = false) {
   return articles ? API.lireArticlesExcel(bytes) : API.lireExcel(bytes)
 }
 
+// Lit un fichier Excel de clients choisi par l'utilisateur → tableau d'objets client
+// (colonnes reconnues automatiquement côté backend).
+export async function importClientsExcel(file) {
+  if (!API) { alert('Import disponible uniquement dans l\'application.'); return [] }
+  const buf = await file.arrayBuffer()
+  const bytes = Array.from(new Uint8Array(buf))
+  return API.lireClientsExcel(bytes)
+}
+
+// Lit un fichier Excel de fournisseurs choisi par l'utilisateur → tableau d'objets fournisseur.
+export async function importFournisseursExcel(file) {
+  if (!API) { alert('Import disponible uniquement dans l\'application.'); return [] }
+  const buf = await file.arrayBuffer()
+  const bytes = Array.from(new Uint8Array(buf))
+  return API.lireFournisseursExcel(bytes)
+}
+
 // Ouvre une fenêtre d'impression (l'utilisateur choisit imprimante ou « Enregistrer en PDF »).
 export function printDocument(title, bodyHtml) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>

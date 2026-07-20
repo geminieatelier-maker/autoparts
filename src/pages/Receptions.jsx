@@ -39,7 +39,7 @@ export default function Receptions() {
     setList(await API.getReceptions({ recherche:q }))
     setARecevoir(await API.getCmdFournisseursARecevoir())
   }
-  async function remove(){ if(!confirm('Supprimer cette réception ?'))return; await API.deleteReception(detail.id); setDetail(null); load() }
+  async function remove(){ if(!confirm('Supprimer cette réception ?'))return; await API.deleteReception(detail.id, currentUser); setDetail(null); load() }
 
   // ---- Formulaire réception ----
   if (form) return (

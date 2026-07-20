@@ -1,17 +1,26 @@
-import { Settings, Building2, Users, Shield, Download, Upload, Save, Plus } from 'lucide-react'
+import { Settings, Building2, Users, Shield, Download, Upload, Save, Plus, Trash2, Clock, RotateCcw, ToggleLeft, ToggleRight } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { API, currentUser } from '../lib/api'
+import { getDefaultPermissions, PERM_LABELS, PERM_GROUPS } from '../lib/permissions'
 
-export default function Parametres() {
+export default function Parametres({ perms = {} }) {
+  const allTabs = [
+    { id: 'Entreprise', always: true },
+    { id: 'Intelligence', always: true },
+    { id: 'Utilisateurs', perm: 'gestion_utilisateurs' },
+    { id: 'Sécurité', always: true },
+    { id: 'Connexions', perm: 'gestion_utilisateurs' },
+    { id: 'Corbeille', perm: 'restauration' },
+    { id: 'Sauvegarde', perm: 'sauvegarde' },
+  ]
+  const tabs = allTabs.filter(t => t.always || perms[t.perm])
   const [tab, setTab] = useState('Entreprise')
-  const tabs = ['Entreprise','Intelligence','Utilisateurs','Sécurité','Sauvegarde']
 
   const [cfg, setCfg] = useState(null)
   useEffect(() => { if (API) API.getConfig().then(c => setCfg(c || {})) }, [])
   const set = (k,v) => setCfg(c => ({ ...c, [k]: v }))
   async function saveCfg() { await API.saveConfig(cfg); alert('Informations enregistrées.') }
 
-  // Sécurité — changement de mot de passe
   const [pw, setPw] = useState({ old:'', neo:'', conf:'' })
   async function changePwd() {
     if (!pw.neo || pw.neo !== pw.conf) return alert('Les nouveaux mots de passe ne correspondent pas.')
@@ -20,28 +29,100 @@ export default function Parametres() {
     if (ok) setPw({ old:'', neo:'', conf:'' })
   }
 
-  // Utilisateurs — gestion des comptes (multi-utilisateurs)
   const roles = ['admin','gestionnaire','operateur']
+  const roleLabels = { admin:'Administrateur', gestionnaire:'Gestionnaire', operateur:'Opérateur' }
   const [users, setUsers] = useState([])
   const [uForm, setUForm] = useState(null)
+  const [permEdit, setPermEdit] = useState(null)
   const loadUsers = () => { if (API) API.getUtilisateurs().then(setUsers) }
   useEffect(() => { loadUsers() }, [])
+
+  function openEditUser(u) {
+    const p = u.permissions && typeof u.permissions === 'object' && Object.keys(u.permissions).length > 0
+      ? u.permissions : null
+    setUForm({ id:u.id, login:u.login, nom:u.nom, role:u.role, actif:u.actif!==false, mdp:'', permissions: p || {} })
+    setPermEdit(null)
+  }
+  function openNewUser() {
+    setUForm({ login:'', nom:'', role:'operateur', actif:true, mdp:'', permissions:{} })
+    setPermEdit(null)
+  }
+
+  function togglePermEdit(userId) {
+    if (permEdit === userId) { setPermEdit(null); return }
+    const u = users.find(x => x.id === userId)
+    if (!u) return
+    const current = u.permissions && typeof u.permissions === 'object' ? u.permissions : {}
+    const base = getDefaultPermissions(u.role)
+    const merged = { ...base }
+    for (const k of Object.keys(current)) {
+      if (typeof current[k] === 'boolean') merged[k] = current[k]
+    }
+    setPermEdit(userId)
+    setUForm(prev => prev && prev.id === userId ? { ...prev, permissions: merged } : { id:u.id, login:u.login, nom:u.nom, role:u.role, actif:u.actif!==false, mdp:'', permissions: merged })
+  }
+
   async function saveUser() {
     if (!uForm.login || !uForm.nom) return alert('Nom et identifiant sont obligatoires.')
     if (!uForm.id && !uForm.mdp) return alert('Définissez un mot de passe pour le nouveau compte.')
-    await API.saveUtilisateur(uForm)
-    setUForm(null); loadUsers()
+    const toSave = { ...uForm }
+    if (permEdit && uForm.permissions) {
+      const defaults = getDefaultPermissions(uForm.role)
+      const overrides = {}
+      for (const k of Object.keys(uForm.permissions)) {
+        if (uForm.permissions[k] !== defaults[k]) overrides[k] = uForm.permissions[k]
+      }
+      toSave.permissions = overrides
+    } else if (!permEdit) {
+      toSave.permissions = {}
+    }
+    await API.saveUtilisateur(toSave)
+    setUForm(null); setPermEdit(null); loadUsers()
   }
 
-  // Sauvegarde / Restauration
+  async function savePermOnly(userId) {
+    const u = users.find(x => x.id === userId)
+    if (!u || !uForm || uForm.id !== userId) return
+    const defaults = getDefaultPermissions(u.role)
+    const overrides = {}
+    for (const k of Object.keys(uForm.permissions || {})) {
+      if (uForm.permissions[k] !== defaults[k]) overrides[k] = uForm.permissions[k]
+    }
+    await API.saveUtilisateur({ id: u.id, login: u.login, nom: u.nom, role: u.role, actif: u.actif !== false, permissions: overrides })
+    setPermEdit(null); setUForm(null); loadUsers()
+    alert('Permissions enregistrées.')
+  }
+
+  // Connexions
+  const [connexions, setConnexions] = useState([])
+  const loadConnexions = () => { if (API && API.getConnexions) API.getConnexions(200).then(setConnexions).catch(()=>{}) }
+  useEffect(() => { if (tab === 'Connexions') loadConnexions() }, [tab])
+
+  // Corbeille
+  const [corbeille, setCorbeille] = useState([])
+  const loadCorbeille = () => { if (API && API.getCorbeille) API.getCorbeille().then(setCorbeille).catch(()=>{}) }
+  useEffect(() => { if (tab === 'Corbeille') loadCorbeille() }, [tab])
+  async function restaurer(item) {
+    if (!confirm(`Restaurer « ${item.entite_label || item.entite_type + ' #' + item.entite_id} » ?`)) return
+    const r = await API.restaurerCorbeille(item.id, currentUser)
+    if (r.ok) { alert('Élément restauré.'); loadCorbeille() }
+    else alert('Erreur : ' + (r.erreur || 'Échec'))
+  }
+  async function viderCorbeille() {
+    if (!confirm('Vider définitivement la corbeille ? Cette action est irréversible.')) return
+    await API.viderCorbeille(currentUser)
+    loadCorbeille()
+  }
+
+  // Sauvegarde
   const [backups, setBackups] = useState([])
   const [bkBusy, setBkBusy] = useState('')
   const loadBackups = () => { if (API && API.listBackups) Promise.resolve(API.listBackups()).then(r => setBackups(r || [])) }
   useEffect(() => { loadBackups() }, [])
   async function backupNow() {
     setBkBusy('Sauvegarde en cours…')
-    try { const r = await API.backupNow(currentUser); setBkBusy('✅ Sauvegarde créée : ' + r.name); loadBackups() }
-    catch (e) { setBkBusy('❌ ' + (e.message || e)) }
+    try { const r = await API.backupNow(currentUser); setBkBusy('Sauvegarde créée : ' + r.name); loadBackups() }
+    catch (e) { setBkBusy('Erreur : ' + (e.message || e)) }
   }
   async function restore(b) {
     if (!confirm(`Restaurer la sauvegarde « ${b.name} » ?\n\nToutes les données actuelles seront remplacées par celles de cette sauvegarde. Cette action est irréversible.`)) return
@@ -50,29 +131,30 @@ export default function Parametres() {
       await API.restoreBackup(b.path, currentUser)
       alert('Restauration terminée. L\'application va se recharger.')
       window.location.reload()
-    } catch (e) { setBkBusy('❌ Échec restauration : ' + (e.message || e)) }
+    } catch (e) { setBkBusy('Échec restauration : ' + (e.message || e)) }
   }
   const fmtSize = (n) => n>1048576 ? (n/1048576).toFixed(1)+' Mo' : Math.max(1,Math.round(n/1024))+' Ko'
   const fmtWhen = (iso) => { try { return new Date(iso).toLocaleString('fr-FR') } catch { return iso } }
 
-  // Données de démonstration / Réinitialisation
   async function loadDemo() {
     if (!confirm('Charger des données de démonstration (clients, commandes, factures, ...) ?\n\nUtile pour tester le logiciel. À faire uniquement sur une base vide ou de test.')) return
     setBkBusy('Chargement des données de démonstration…')
     try { await API.seedDemoData(currentUser); alert('Données de démonstration chargées. L\'application va se recharger.'); window.location.reload() }
-    catch (e) { setBkBusy('❌ ' + (e.message || e)) }
+    catch (e) { setBkBusy('Erreur : ' + (e.message || e)) }
   }
   async function resetAll() {
-    if (!confirm('⚠️ RÉINITIALISER TOUTES LES DONNÉES ?\n\nClients, commandes, devis, factures, paiements, expéditions... tout sera supprimé définitivement.\nLes comptes utilisateurs et les paramètres entreprise seront conservés.\n\nFaites une sauvegarde avant si besoin. Continuer ?')) return
+    if (!confirm('RÉINITIALISER TOUTES LES DONNÉES ?\n\nClients, commandes, devis, factures, paiements, expéditions... tout sera supprimé définitivement.\nLes comptes utilisateurs et les paramètres entreprise seront conservés.\n\nFaites une sauvegarde avant si besoin. Continuer ?')) return
     if (!confirm('Dernière confirmation : cette action est IRRÉVERSIBLE. Réinitialiser maintenant ?')) return
     setBkBusy('Réinitialisation en cours…')
     try { await API.resetData(currentUser); alert('Données réinitialisées. L\'application va se recharger.'); window.location.reload() }
-    catch (e) { setBkBusy('❌ ' + (e.message || e)) }
+    catch (e) { setBkBusy('Erreur : ' + (e.message || e)) }
   }
+
+  const typeLabels = { commande_client:'Commande client', commande_fournisseur:'Commande fournisseur', facture:'Facture', cotation:'Cotation', reception:'Réception', client:'Client', fournisseur:'Fournisseur' }
 
   return <>
     <div className="tabs">
-      {tabs.map(t=><div key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)}>{t}</div>)}
+      {tabs.map(t=><div key={t.id} className={`tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>{t.id}</div>)}
     </div>
 
     {tab === 'Entreprise' && <div className="card">
@@ -114,16 +196,16 @@ export default function Parametres() {
       <div className="card">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
           <div className="card-title" style={{marginBottom:0}}><Users size={18}/> Comptes utilisateurs</div>
-          {!uForm && <button className="btn btn-p btn-sm" onClick={()=>setUForm({ login:'', nom:'', role:'operateur', actif:true, mdp:'' })}><Plus size={16}/> Nouveau compte</button>}
+          {!uForm && !permEdit && <button className="btn btn-p btn-sm" onClick={openNewUser}><Plus size={16}/> Nouveau compte</button>}
         </div>
 
-        {uForm && <div style={{background:'#0f172a',border:'1px solid #334155',borderRadius:8,padding:14,marginBottom:14}}>
+        {uForm && !permEdit && <div style={{background:'#0f172a',border:'1px solid #334155',borderRadius:8,padding:14,marginBottom:14}}>
           <div style={{fontWeight:600,color:'#f8fafc',marginBottom:10}}>{uForm.id ? 'Modifier le compte' : 'Nouveau compte'}</div>
           <div className="grid2">
             <div className="fg"><label>Nom complet</label><input value={uForm.nom} onChange={e=>setUForm(u=>({...u,nom:e.target.value}))}/></div>
             <div className="fg"><label>Identifiant (login)</label><input value={uForm.login} onChange={e=>setUForm(u=>({...u,login:e.target.value}))}/></div>
             <div className="fg"><label>Rôle</label>
-              <select value={uForm.role} onChange={e=>setUForm(u=>({...u,role:e.target.value}))}>{roles.map(r=><option key={r} value={r}>{r}</option>)}</select>
+              <select value={uForm.role} onChange={e=>setUForm(u=>({...u,role:e.target.value}))}>{roles.map(r=><option key={r} value={r}>{roleLabels[r]}</option>)}</select>
             </div>
             <div className="fg"><label>Statut</label>
               <select value={uForm.actif?'1':'0'} onChange={e=>setUForm(u=>({...u,actif:e.target.value==='1'}))}><option value="1">Actif</option><option value="0">Désactivé</option></select>
@@ -133,21 +215,53 @@ export default function Parametres() {
           </div>
           <div style={{display:'flex',gap:8,marginTop:10}}>
             <button className="btn btn-p" onClick={saveUser}><Save size={16}/> Enregistrer</button>
-            <button className="btn btn-o" onClick={()=>setUForm(null)}>Annuler</button>
+            <button className="btn btn-o" onClick={()=>{setUForm(null);setPermEdit(null)}}>Annuler</button>
           </div>
         </div>}
 
         {users.length===0 ? <div style={{color:'#64748b',fontSize:14}}>Aucun compte.</div> :
         users.map(u=>(
-          <div key={u.id} className="pay-row">
-            <div>
-              <div style={{fontSize:14,color:'#f8fafc',fontWeight:600}}>{u.nom} <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>· @{u.login}</span></div>
-              <div style={{fontSize:12,color:'#94a3b8',marginTop:2}}>
-                <span className="badge b-b">{u.role}</span>
-                {u.actif===false ? <span className="badge b-r" style={{marginLeft:6}}>désactivé</span> : <span className="badge b-g" style={{marginLeft:6}}>actif</span>}
+          <div key={u.id}>
+            <div className="pay-row">
+              <div>
+                <div style={{fontSize:14,color:'#f8fafc',fontWeight:600}}>{u.nom} <span style={{fontSize:12,color:'#94a3b8',fontWeight:400}}>· @{u.login}</span></div>
+                <div style={{fontSize:12,color:'#94a3b8',marginTop:2}}>
+                  <span className="badge b-b">{roleLabels[u.role]||u.role}</span>
+                  {u.actif===false ? <span className="badge b-r" style={{marginLeft:6}}>désactivé</span> : <span className="badge b-g" style={{marginLeft:6}}>actif</span>}
+                  {u.permissions && Object.keys(u.permissions).length > 0 && <span className="badge b-y" style={{marginLeft:6}}>permissions personnalisées</span>}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <button className="btn btn-o btn-sm" onClick={()=>togglePermEdit(u.id)} title="Permissions individuelles">
+                  {permEdit === u.id ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>} Permissions
+                </button>
+                <button className="btn btn-o btn-sm" onClick={()=>openEditUser(u)}>Modifier</button>
               </div>
             </div>
-            <button className="btn btn-o btn-sm" onClick={()=>setUForm({ id:u.id, login:u.login, nom:u.nom, role:u.role, actif:u.actif!==false, mdp:'' })}>Modifier</button>
+            {permEdit === u.id && uForm && uForm.id === u.id && <div style={{background:'#0f172a',border:'1px solid #334155',borderRadius:8,padding:14,marginBottom:8,marginTop:-4}}>
+              <div style={{fontWeight:600,color:'#f8fafc',marginBottom:10}}>Permissions de {u.nom} <span style={{fontSize:12,fontWeight:400,color:'#94a3b8'}}>(rôle de base : {roleLabels[u.role]||u.role})</span></div>
+              {PERM_GROUPS.map(g => (
+                <div key={g.label} style={{marginBottom:12}}>
+                  <div style={{fontSize:12,color:'#64748b',fontWeight:600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{g.label}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'4px 16px'}}>
+                    {g.perms.map(p => {
+                      const val = uForm.permissions[p]
+                      const def = getDefaultPermissions(u.role)[p]
+                      const isOverride = val !== def
+                      return <label key={p} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'4px 0',color: isOverride ? '#f5c518' : '#e2e8f0'}}>
+                        <input type="checkbox" checked={!!val} onChange={e => setUForm(prev => ({...prev, permissions:{...prev.permissions, [p]:e.target.checked}}))} style={{accentColor: isOverride ? '#f5c518' : '#3b82f6'}} />
+                        <span style={{fontSize:13}}>{PERM_LABELS[p]||p}</span>
+                      </label>
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:'#64748b',marginBottom:8}}>Les permissions en jaune sont différentes du rôle par défaut.</div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn btn-p btn-sm" onClick={()=>savePermOnly(u.id)}><Save size={14}/> Enregistrer les permissions</button>
+                <button className="btn btn-o btn-sm" onClick={()=>{setPermEdit(null);setUForm(null)}}>Annuler</button>
+              </div>
+            </div>}
           </div>
         ))}
       </div>
@@ -159,6 +273,47 @@ export default function Parametres() {
       <div className="fg"><label>Nouveau mot de passe</label><input type="password" value={pw.neo} onChange={e=>setPw(p=>({...p,neo:e.target.value}))}/></div>
       <div className="fg"><label>Confirmer</label><input type="password" value={pw.conf} onChange={e=>setPw(p=>({...p,conf:e.target.value}))}/></div>
       <button className="btn btn-p" onClick={changePwd}>Changer le mot de passe</button>
+    </div>}
+
+    {tab === 'Connexions' && <div className="card">
+      <div className="card-title"><Clock size={18}/> Historique des connexions</div>
+      {connexions.length === 0 ? <div style={{color:'#64748b',fontSize:14}}>Aucune connexion enregistrée.</div> :
+      <div className="tbl-wrap"><table className="tbl">
+        <thead><tr><th>Utilisateur</th><th>Date et heure</th></tr></thead>
+        <tbody>
+          {connexions.map(c => (
+            <tr key={c.id}>
+              <td style={{fontWeight:600}}>{c.utilisateur_nom || '—'}</td>
+              <td>{fmtWhen(c.created_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table></div>}
+    </div>}
+
+    {tab === 'Corbeille' && <div>
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div className="card-title" style={{marginBottom:0}}><Trash2 size={18}/> Corbeille ({corbeille.length})</div>
+          {corbeille.length > 0 && <button className="btn btn-o btn-sm" style={{color:'#fca5a5'}} onClick={viderCorbeille}><Trash2 size={14}/> Vider la corbeille</button>}
+        </div>
+        {corbeille.length === 0 ? <div style={{color:'#64748b',fontSize:14}}>La corbeille est vide.</div> :
+        corbeille.map(item => (
+          <div key={item.id} className="pay-row">
+            <div>
+              <div style={{fontSize:14,color:'#f8fafc',fontWeight:600}}>
+                {item.entite_label || item.entite_type + ' #' + item.entite_id}
+              </div>
+              <div style={{fontSize:12,color:'#94a3b8',marginTop:2}}>
+                <span className="badge b-b">{typeLabels[item.entite_type] || item.entite_type}</span>
+                <span style={{marginLeft:8}}>supprimé par {item.supprime_par_nom || '—'}</span>
+                <span style={{marginLeft:8}}>{fmtWhen(item.created_at)}</span>
+              </div>
+            </div>
+            <button className="btn btn-o btn-sm" onClick={()=>restaurer(item)}><RotateCcw size={14}/> Restaurer</button>
+          </div>
+        ))}
+      </div>
     </div>}
 
     {tab === 'Sauvegarde' && <div>
