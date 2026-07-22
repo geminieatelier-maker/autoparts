@@ -42,6 +42,7 @@ const PERMISSIONS_DEFAUT = {
     intelligence:true, journal:true, parametres:true,
     voir_marges:true, voir_prix_achat:true, voir_benefices:true, voir_stats_financieres:true,
     voir_creances:true, gestion_utilisateurs:true, sauvegarde:true, restauration:true,
+    actions_sensibles:true,
   },
   gestionnaire: {
     dashboard:true, commandes:true, clients:true, comparateur:true, fournisseurs:true,
@@ -49,6 +50,7 @@ const PERMISSIONS_DEFAUT = {
     intelligence:true, journal:true, parametres:true,
     voir_marges:false, voir_prix_achat:false, voir_benefices:false, voir_stats_financieres:false,
     voir_creances:true, gestion_utilisateurs:false, sauvegarde:false, restauration:false,
+    actions_sensibles:false,
   },
   operateur: {
     dashboard:true, commandes:true, clients:true, comparateur:false, fournisseurs:false,
@@ -56,8 +58,16 @@ const PERMISSIONS_DEFAUT = {
     intelligence:false, journal:false, parametres:true,
     voir_marges:false, voir_prix_achat:false, voir_benefices:false, voir_stats_financieres:false,
     voir_creances:false, gestion_utilisateurs:false, sauvegarde:false, restauration:false,
+    actions_sensibles:false,
   },
 };
+
+// Vérifie qu'un utilisateur possède une permission (validation côté serveur).
+function userCan(user, perm) {
+  if (!user) return false;
+  const perms = getPermissions({ role: user.role, permissions: user.permissions });
+  return !!perms[perm];
+}
 
 function getPermissions(user) {
   const role = user.role || 'operateur';
@@ -117,11 +127,14 @@ const API = {
       ['%'+String(f.recherche).toLowerCase()+'%']);
     return db.query('SELECT * FROM clients WHERE actif=true ORDER BY nom');
   },
-  saveClient: async (c) => {
+  saveClient: async (c, user) => {
     if (c.id) { await db.query('UPDATE clients SET nom=$1,contact=$2,tel=$3,email=$4,adresse=$5,remise=$6,notes=$7,contact2=$8,tel2=$9 WHERE id=$10',
-      [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes,c.contact2||'',c.tel2||'',c.id]); return c.id; }
+      [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes,c.contact2||'',c.tel2||'',c.id]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Modification client '+c.nom, 'client', c.id);
+      return c.id; }
     const r = await db.query('INSERT INTO clients (nom,contact,tel,email,adresse,remise,notes,contact2,tel2) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
       [c.nom,c.contact,c.tel,c.email,c.adresse,c.remise||0,c.notes,c.contact2||'',c.tel2||'']);
+    await logEvent(user?user.id:null, user?user.nom:null, 'Création client '+c.nom, 'client', r[0].id);
     return r[0].id;
   },
   deleteClient: async (id, user) => {
@@ -196,11 +209,14 @@ const API = {
     f.commandes = await db.query('SELECT numero, date_cmd, total, devise, statut FROM commandes_fournisseur WHERE fournisseur_id=$1 ORDER BY date_cmd DESC LIMIT 8', [id]);
     return f;
   },
-  saveFournisseur: async (f) => {
+  saveFournisseur: async (f, user) => {
     if (f.id) { await db.query('UPDATE fournisseurs SET nom=$1,pays=$2,devise=$3,rating=$4,delai=$5,contact=$6,tel=$7,email=$8,adresse=$9,conditions_paiement=$10,notes=$11,contact2=$12,tel2=$13 WHERE id=$14',
-      [f.nom,f.pays,f.devise,f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes,f.contact2||'',f.tel2||'',f.id]); return f.id; }
+      [f.nom,f.pays,f.devise,f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes,f.contact2||'',f.tel2||'',f.id]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Modification fournisseur '+f.nom, 'fournisseur', f.id);
+      return f.id; }
     const r = await db.query('INSERT INTO fournisseurs (nom,pays,devise,rating,delai,contact,tel,email,adresse,conditions_paiement,notes,contact2,tel2) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id',
       [f.nom,f.pays,f.devise||'MGA',f.rating||3,f.delai,f.contact,f.tel,f.email,f.adresse,f.conditions_paiement,f.notes,f.contact2||'',f.tel2||'']);
+    await logEvent(user?user.id:null, user?user.nom:null, 'Création fournisseur '+f.nom, 'fournisseur', r[0].id);
     return r[0].id;
   },
   deleteFournisseur: async (id, user) => {
@@ -561,6 +577,7 @@ const API = {
       } catch(e){ await db.query('ROLLBACK'); throw e; }
     },
     deleteFacture: async (id, user) => {
+      if (!userCan(user, 'actions_sensibles')) throw new Error("Action sensible non autorisée : la suppression d'une facture requiert la validation d'un administrateur.");
       const row = (await db.query('SELECT * FROM factures WHERE id=$1', [id]))[0];
       if (row) {
         const lignes = await db.query('SELECT * FROM facture_lignes WHERE facture_id=$1', [id]);
@@ -571,7 +588,12 @@ const API = {
       await db.query('DELETE FROM facture_lignes WHERE facture_id=$1', [id]);
       return db.query('DELETE FROM factures WHERE id=$1', [id]);
     },
-    updateFactureStatut: (id, statut) => db.query('UPDATE factures SET statut=$1 WHERE id=$2', [statut, id]),
+    updateFactureStatut: async (id, statut, user) => {
+      const row = (await db.query('SELECT numero FROM factures WHERE id=$1', [id]))[0];
+      await db.query('UPDATE factures SET statut=$1 WHERE id=$2', [statut, id]);
+      await logEvent(user?user.id:null, user?user.nom:null, 'Statut facture '+(row?row.numero:'#'+id)+' → '+statut, 'facture', id);
+      return true;
+    },
   
     // ---------- Module 8 : Paiements ----------
     getPaiements: (f={}) => {
@@ -586,14 +608,20 @@ const API = {
       await logEvent(user?user.id:null, user?user.nom:null, 'Paiement '+(p.type==='fournisseur'?'fournisseur ':'client ')+(p.reference_doc||'')+' '+Number(p.montant||0)+' Ar', 'paiement', r[0].id);
       return { id: r[0].id };
     },
-    updatePaiement: async (id, champs) => {
+    updatePaiement: async (id, champs, user) => {
       const allowed = ['type','tiers_id','tiers_nom','reference_doc','montant','mode','echeance','date_paiement','statut'];
       const keys = Object.keys(champs||{}).filter(k=>allowed.includes(k));
       if (!keys.length) return true;
+      // Action sensible : modifier le montant d'un paiement existant requiert la validation d'un administrateur.
+      if (keys.includes('montant') && !userCan(user, 'actions_sensibles'))
+        throw new Error("Action sensible non autorisée : la modification du montant d'un paiement requiert la validation d'un administrateur.");
+      const before = (await db.query('SELECT * FROM paiements WHERE id=$1', [id]))[0] || {};
       const values = keys.map(k => k==='montant' ? Number(champs[k]||0) : champs[k]);
       const set = keys.map((k,i)=>`${k}=$${i+1}`).join(',');
       values.push(id);
       await db.query(`UPDATE paiements SET ${set} WHERE id=$${values.length}`, values);
+      const details = keys.map(k => `${k}: ${before[k]} → ${champs[k]}`).join(', ');
+      await logEvent(user?user.id:null, user?user.nom:null, 'Modification paiement #'+id, 'paiement', id, details);
       return true;
     },
   

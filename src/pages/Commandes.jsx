@@ -32,7 +32,7 @@ export default function Commandes() {
   async function nouveauClient() {
     const nom = prompt('Nom du nouveau client :')
     if (!nom || !nom.trim()) return
-    const id = await API.saveClient({ nom: nom.trim() })
+    const id = await API.saveClient({ nom: nom.trim() }, currentUser)
     const cs = await API.getClients({}); setClients(cs); setH('client_id', String(id))
   }
   const setH = (k,v) => setForm(f => ({ ...f, header:{ ...f.header, [k]:v } }))

@@ -108,7 +108,7 @@ export default function App() {
           <div className="sb-icon" style={{background:'transparent',overflow:'hidden',padding:0}}><img src={logoUrl} alt="ABS Store" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>
           <div>
             <h1>ABS Store</h1>
-            <small>Pièces autos</small>
+            <small>Pièces autos · v{__APP_VERSION__}</small>
           </div>
           <button className="sb-close" onClick={() => setOpen(false)}><X size={20} /></button>
         </div>
@@ -165,7 +165,7 @@ export default function App() {
             <Route path="/comparateur" element={perms.comparateur ? <Comparateur /> : <Blocked />} />
             <Route path="/fournisseurs" element={perms.fournisseurs ? <Fournisseurs /> : <Blocked />} />
             <Route path="/cmd-fournisseurs" element={perms.cmd_fournisseurs ? <CmdFournisseurs /> : <Blocked />} />
-            <Route path="/receptions" element={perms.receptions ? <Receptions /> : <Blocked />} />
+            <Route path="/receptions" element={perms.receptions ? <Receptions perms={perms} /> : <Blocked />} />
             <Route path="/facturation" element={perms.facturation ? <Facturation perms={perms} /> : <Blocked />} />
             <Route path="/paiements" element={perms.paiements ? <Paiements perms={perms} /> : <Blocked />} />
             <Route path="/expeditions" element={perms.expeditions ? <Expeditions /> : <Blocked />} />

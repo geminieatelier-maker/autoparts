@@ -26,8 +26,8 @@ export default function Dashboard({ onNavigate, perms = {} }) {
       <div className="stat"><div className="label">À réceptionner</div><div className="value" style={{color:'#22c55e'}}>{v(s?.cf_a_recevoir)}</div></div>
       <div className="stat"><div className="label">Clients</div><div className="value" style={{color:'#f8fafc'}}>{v(s?.nb_clients)}</div></div>
       <div className="stat"><div className="label">Fournisseurs</div><div className="value" style={{color:'#f8fafc'}}>{v(s?.nb_fournisseurs)}</div></div>
-      <div className="stat"><div className="label">Commandes clients (mois)</div><div className="value" style={{color:'#22c55e'}}>{s?fmtAr(s.ca_mois):'—'}</div></div>
-      <div className="stat"><div className="label">Achats fournisseurs (mois)</div><div className="value" style={{color:'#a855f7'}}>{s?fmtAr(s.achats_mois):'—'}</div></div>
+      {perms.voir_stats_financieres !== false && <div className="stat"><div className="label">Commandes clients (mois)</div><div className="value" style={{color:'#22c55e'}}>{s?fmtAr(s.ca_mois):'—'}</div></div>}
+      {perms.voir_prix_achat !== false && <div className="stat"><div className="label">Achats fournisseurs (mois)</div><div className="value" style={{color:'#a855f7'}}>{s?fmtAr(s.achats_mois):'—'}</div></div>}
       {perms.voir_creances !== false && <div className="stat"><div className="label">Créances clients</div><div className="value" style={{color:'#ef4444'}}>{s?fmtAr(s.creances):'—'}</div></div>}
       {perms.voir_creances !== false && <div className="stat"><div className="label">Dettes fournisseurs</div><div className="value" style={{color:'#f5c518'}}>{s?fmtAr(s.dettes):'—'}</div></div>}
       {perms.voir_benefices !== false && <div className="stat"><div className="label">Bénéfice (mois)</div><div className="value" style={{color:'#22c55e'}}>{s?fmtAr(s.benefice_mois):'—'}</div></div>}

@@ -6,7 +6,8 @@ const badge = s => s==='Complète'?'b-g':s==='Partielle'?'b-y':'b-r'
 const ligneBadge = s => s==='Reçu'?'b-g':s==='Partiel'?'b-y':'b-r'
 const today = () => new Date().toISOString().slice(0,10)
 
-export default function Receptions() {
+export default function Receptions({ perms = {} }) {
+  const showCout = perms.voir_prix_achat !== false
   const [q, setQ] = useState('')
   const [list, setList] = useState([])
   const [aRecevoir, setARecevoir] = useState([])
@@ -74,17 +75,17 @@ export default function Receptions() {
         </div>
       </div>
       <div className="card">
-        <div className="card-title"><Calculator size={18}/> Frais &amp; coût de revient</div>
+        <div className="card-title"><Calculator size={18}/> Frais{showCout ? ' & coût de revient' : ''}</div>
         <div className="grid2">
           <div className="fg"><label>Frais de transport (Ar)</label><input type="number" value={form.header.frais.transport} onChange={e=>setFrais('transport',e.target.value)}/></div>
           <div className="fg"><label>Frais d'importation / douane (Ar)</label><input type="number" value={form.header.frais.import} onChange={e=>setFrais('import',e.target.value)}/></div>
           <div className="fg"><label>Autres frais (Ar)</label><input type="number" value={form.header.frais.autres} onChange={e=>setFrais('autres',e.target.value)}/></div>
         </div>
-        <div style={{display:'flex',gap:20,justifyContent:'flex-end',marginTop:8,flexWrap:'wrap'}}>
+        {showCout && <div style={{display:'flex',gap:20,justifyContent:'flex-end',marginTop:8,flexWrap:'wrap'}}>
           <div style={{color:'#94a3b8',fontSize:14}}>Marchandise : <b style={{color:'#f8fafc'}}>{fmtAr(totalMarch())}</b></div>
           <div style={{color:'#94a3b8',fontSize:14}}>Frais : <b style={{color:'#f8fafc'}}>{fmtAr(totalFrais())}</b></div>
           <div style={{color:'#94a3b8',fontSize:15}}>Coût de revient : <b style={{color:'#f5c518',fontSize:17}}>{fmtAr(coutRevient())}</b></div>
-        </div>
+        </div>}
       </div>
       <div className="card">
         <div className="fg"><label>Observations</label><textarea value={form.header.observations} onChange={e=>setForm(f=>({...f,header:{...f.header,observations:e.target.value}}))} rows={2} style={{width:'100%',padding:'12px 16px',background:'#0f172a',border:'1px solid #334155',borderRadius:8,color:'#f8fafc',fontSize:15,outline:'none',resize:'vertical'}}/></div>

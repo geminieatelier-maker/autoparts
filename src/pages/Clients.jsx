@@ -45,7 +45,7 @@ export default function Clients() {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   async function save() {
     if (!form.nom.trim()) return alert('Le nom du client est obligatoire')
-    await API.saveClient(form); setForm(null); setSelected(null); load()
+    await API.saveClient(form, currentUser); setForm(null); setSelected(null); load()
   }
   async function remove(id) {
     if (!confirm('Supprimer ce client ?')) return

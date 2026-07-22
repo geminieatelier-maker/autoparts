@@ -162,7 +162,7 @@ export default function Facturation({ perms = {} }) {
     setForm(null); load()
   }
   async function changeStatut(s) {
-    await API.updateFactureStatut(detail.id, s)
+    await API.updateFactureStatut(detail.id, s, currentUser)
     setDetail(await API.getFactureDetail(detail.id)); load()
   }
 

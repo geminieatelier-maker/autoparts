@@ -45,7 +45,7 @@ export default function Fournisseurs() {
   function openEdit(f) { setForm({ ...f }); setSelected(null) }
   async function save() {
     if (!form.nom.trim()) return alert('Le nom est obligatoire')
-    await API.saveFournisseur(form)
+    await API.saveFournisseur(form, currentUser)
     setForm(null); setSelected(null); load()
   }
   async function remove(id) {

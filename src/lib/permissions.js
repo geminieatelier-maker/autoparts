@@ -7,6 +7,7 @@ const PERMISSIONS_DEFAUT = {
     intelligence:true, journal:true, parametres:true,
     voir_marges:true, voir_prix_achat:true, voir_benefices:true, voir_stats_financieres:true,
     voir_creances:true, gestion_utilisateurs:true, sauvegarde:true, restauration:true,
+    actions_sensibles:true,
   },
   gestionnaire: {
     dashboard:true, commandes:true, clients:true, comparateur:true, fournisseurs:true,
@@ -14,6 +15,7 @@ const PERMISSIONS_DEFAUT = {
     intelligence:true, journal:true, parametres:true,
     voir_marges:false, voir_prix_achat:false, voir_benefices:false, voir_stats_financieres:false,
     voir_creances:true, gestion_utilisateurs:false, sauvegarde:false, restauration:false,
+    actions_sensibles:false,
   },
   operateur: {
     dashboard:true, commandes:true, clients:true, comparateur:false, fournisseurs:false,
@@ -21,6 +23,7 @@ const PERMISSIONS_DEFAUT = {
     intelligence:false, journal:false, parametres:true,
     voir_marges:false, voir_prix_achat:false, voir_benefices:false, voir_stats_financieres:false,
     voir_creances:false, gestion_utilisateurs:false, sauvegarde:false, restauration:false,
+    actions_sensibles:false,
   },
 }
 
@@ -62,12 +65,14 @@ export const PERM_LABELS = {
   gestion_utilisateurs: 'Gestion des utilisateurs',
   sauvegarde: 'Sauvegarde',
   restauration: 'Restauration',
+  actions_sensibles: 'Valider les actions sensibles (suppr. facture, modif. paiement, prix de vente)',
 }
 
 export const PERM_GROUPS = [
   { label: 'Modules', perms: ['dashboard','commandes','clients','comparateur','fournisseurs','cmd_fournisseurs','receptions','facturation','paiements','expeditions','intelligence','journal','parametres'] },
   { label: 'Données sensibles', perms: ['voir_marges','voir_prix_achat','voir_benefices','voir_stats_financieres','voir_creances'] },
   { label: 'Administration', perms: ['gestion_utilisateurs','sauvegarde','restauration'] },
+  { label: 'Validation', perms: ['actions_sensibles'] },
 ]
 
 export { PERMISSIONS_DEFAUT }
